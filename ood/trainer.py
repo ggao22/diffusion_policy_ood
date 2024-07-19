@@ -3,65 +3,20 @@ from datetime import datetime
 
 import zarr
 import numpy as np
-import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import DataLoader
-from torchvision import transforms
 from tqdm.auto import tqdm
 
 from dataset import ObsActPairs
 from models import EquivalenceMap, GaussianMixture
+from utils import draw_latent, eval_encoder
 
-
-def draw_3d_traj(zs, save_path):
-    fig = plt.figure(figsize=(18,12))
-    fig.subplots_adjust(top=0.92)
-    fig.tight_layout()
-    azims = [90]*6
-    elevs = [50]*6
-    for o in range(1,7):
-        ax = fig.add_subplot(2, 3, o, projection='3d')
-        x = zs[:,o-1]
-        y = zs[:,o]
-        z = zs[:,o+1]
-        for i in range(len(x)):
-            ax.scatter(x[i:i+1], y[i:i+1], z[i:i+1], color=plt.cm.rainbow(i/zs.shape[0]), s=30)
-            ax.set_xlabel('x')
-            ax.set_ylabel('y')
-            ax.set_zlabel('z')
-            ax.azim = azims[o-1]
-            ax.elev = elevs[o-1]
-    plt.savefig(os.path.join(save_path, "latent.png"))
-
-def draw_latent(zs, save_path):
-    fig = plt.figure(figsize=(18,12))
-    fig.tight_layout()
-    for o in range(1,7):
-        ax = fig.add_subplot(2, 3, o)
-        x = zs[:,2*(o-1)]
-        y = zs[:,2*(o-1)+1]
-        for i in range(len(x)):
-            ax.scatter(x[i:i+1], y[i:i+1], color=plt.cm.rainbow(i/zs.shape[0]), s=30)
-            ax.set_xlabel('x')
-            ax.set_ylabel('y')
-            ax.set_title(f"Point {o}")
-    plt.savefig(save_path)
-
-
-def eval_encoder(imgs, encoder, device):
-    with torch.no_grad():
-        preprocess = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
-        latent_data = []
-        for i in range(len(imgs)):
-            latent_data.append(encoder(preprocess(imgs[i]).unsqueeze(0).to(device)).detach().cpu().numpy())
-        latent_data = torch.from_numpy(np.vstack((latent_data)))
-        return latent_data
 
 
 def train_recovery_policy(cfg):
     # config
     now = datetime.now()
-    outpath = os.path.join(cfg["output_dir"], now.strftime("%m-%d-%Y_%H:%M"))
+    outpath = os.path.join(cfg["output_dir"], cfg["dataname"]+"; "+now.strftime("%m-%d-%Y_%H:%M"))
     os.makedirs(outpath, exist_ok=False)
 
     # data
@@ -125,7 +80,9 @@ def train_recovery_policy(cfg):
                 break
 
     # save encoder
-    torch.save(encoder, os.path.join(outpath, "encoder.ckpt"))
+    torch.save({
+        'model_state_dict'              : encoder.state_dict(),
+        }, os.path.join(outpath, "encoder.pt"))
 
     # latent data for gmm
     full_latent_data = eval_encoder(image_dataset[::2], encoder, device).to(device)
@@ -141,7 +98,9 @@ def train_recovery_policy(cfg):
     draw_latent(gmm_latent.cpu(), os.path.join(outpath, "gmm_latent.png"))
     
     # save gmm
-    torch.save(gmm, os.path.join(outpath, "gmm.ckpt"))
+    torch.save({
+        'model_state_dict'              : gmm.state_dict(),
+        }, os.path.join(outpath, "gmm.pt"))
 
 
     

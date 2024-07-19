@@ -241,6 +241,8 @@ class GaussianMixture(torch.nn.Module):
                 self.__update_mu(mu_old)
                 self.__update_var(var_old)
 
+        self.mu = torch.nn.Parameter(self.mu.unsqueeze(0))
+
         self.params_fitted = True
 
 
@@ -297,7 +299,7 @@ class GaussianMixture(torch.nn.Module):
                 x_k = self.mu[0, k] + torch.randn(int(counts[k]), self.n_features, device=x.device) * torch.sqrt(self.var[0, k])
             elif self.covariance_type == "full":
                 #mu shape error
-                d_k = torch.distributions.multivariate_normal.MultivariateNormal(self.mu[k], self.var[0, k])
+                d_k = torch.distributions.multivariate_normal.MultivariateNormal(self.mu[0, k], self.var[0, k])
                 x_k = torch.stack([d_k.sample().cpu() for _ in range(int(counts[k]))])
 
             x = torch.cat((x, x_k), dim=0)

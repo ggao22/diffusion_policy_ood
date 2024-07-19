@@ -4,6 +4,21 @@ from diffusion_policy.common.replay_buffer import ReplayBuffer
 from diffusion_policy.env.pusht.pusht_keypoints_env import PushTKeypointsEnv
 import pygame
 
+def condition(obs, side_len, pre_def='left'):
+    if pre_def=='left':
+        cond = lambda x: x > side_len//2
+    elif pre_def=='right':
+        cond = lambda x: x < side_len//2
+    else:
+        pass
+
+    keypoint = obs.reshape(2,-1)[0].reshape(-1,2)[:9]
+    for pt in keypoint:
+        if cond(pt[0]):
+            return False
+    return True
+
+
 @click.command()
 @click.option('-o', '--output', required=True)
 @click.option('-rs', '--render_size', default=96, type=int)
@@ -28,7 +43,7 @@ def main(output, render_size, control_hz):
 
     # create PushT env with keypoints
     kp_kwargs = PushTKeypointsEnv.genenerate_keypoint_manager_params()
-    env = PushTKeypointsEnv(render_size=render_size, render_action=False, **kp_kwargs)
+    env = PushTKeypointsEnv(render_size=render_size, render_action=True, draw_keypoints=True, **kp_kwargs)
     agent = env.teleop_agent()
     clock = pygame.time.Clock()
     
@@ -37,13 +52,19 @@ def main(output, render_size, control_hz):
         episode = list()
         # record in seed order, starting with 0
         seed = replay_buffer.n_episodes
-        print(f'starting seed {seed}')
 
         # set seed for env
         env.seed(seed)
         
         # reset env and get observations (including info and render for recording)
         obs = env.reset()
+        while not condition(obs, 512, 'right'):
+            seed += 2**12
+            env.seed(seed)
+            obs = env.reset()
+
+        print(f'starting seed {seed}')
+        
         info = env._get_info()
         img = env.render(mode='human')
         
@@ -89,6 +110,7 @@ def main(output, render_size, control_hz):
                 # discard unused information such as visibility mask and agent pos
                 # for compatibility
                 keypoint = obs.reshape(2,-1)[0].reshape(-1,2)[:9]
+                print(keypoint)
                 data = {
                     'img': img,
                     'state': np.float32(state),
