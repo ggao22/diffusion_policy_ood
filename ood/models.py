@@ -5,6 +5,10 @@ import numpy as np
 
 from math import pi
 
+from torch import tensor, log, exp, flatten
+from torch.distributions import MultivariateNormal as MVN
+from utils import normalize_data, unnormalize_data, unnormalize_gradient
+
 
 class EquivalenceMap(nn.Module):
     def __init__(self, input_size=(180,256), input_ch=3, output_size=3):
@@ -17,8 +21,9 @@ class EquivalenceMap(nn.Module):
         self.c1 = nn.Conv2d(input_ch,64,kernel_size=4,padding=1,stride=2)
         self.c2 = nn.Conv2d(64,64,kernel_size=4,padding=1,stride=2)
         self.c3 = nn.Conv2d(64,64,kernel_size=4,padding=1,stride=2)
-        self.c4 = nn.Conv2d(64,8,kernel_size=4,padding=1,stride=2)
-        self.fc1 = nn.Linear(np.prod([8,6,6]), 64)
+        self.c4 = nn.Conv2d(64,64,kernel_size=4,padding=1,stride=2)
+        self.c5 = nn.Conv2d(64,8,kernel_size=4,padding=1,stride=2)
+        self.fc1 = nn.Linear(np.prod([8,3,3]), 64)
         self.fc2 = nn.Linear(64, 64)
         self.fc3 = nn.Linear(64,self.output_size)
 
@@ -28,6 +33,7 @@ class EquivalenceMap(nn.Module):
         x = F.relu(self.c2(x))
         x = F.relu(self.c3(x))
         x = F.relu(self.c4(x))
+        x = F.relu(self.c5(x))
 
         # print(x.shape)
         x = x.view([x.size()[0], -1])
@@ -558,52 +564,41 @@ class GaussianMixture(torch.nn.Module):
 
 
 
-
-from torch import tensor, log, exp, diag, flatten
-from torch.distributions import MultivariateNormal as MVN
-
-class CombinedPolicy(nn.Module):
-    def __init__(self, Encoder, DensityNetwork, Policy, latent_stats, action_stats, eps=-0.5, tau=0.5, eta=1.0):
-        super(CombinedPolicy,self).__init__()
+class RecoveryPolicy(nn.Module):
+    def __init__(self, Encoder, GMM_PARAMS, latent_stats, eps=-0.5, tau=0.5, eta=1.0):
+        super(RecoveryPolicy,self).__init__()
         self.Encoder = Encoder
-        self.DensityNetwork = DensityNetwork
-        self.Policy = Policy
+        self.GMM_PARAMS = GMM_PARAMS
         self.latent_stats = latent_stats
-        self.action_stats = action_stats
-
 
         self.eps = eps
         self.tau = tau
         self.eta = eta
 
-    def recovery_policy(self,obs,cond):
-        log_pis, mus, sigmas = self.DensityNetwork(cond)
-        log_pis, mus, sigmas = log_pis[0], mus[0], sigmas[0]
+    def forward(self,obs):
+        pis, mus, sigmas = tensor(self.GMM_PARAMS['weights_']), tensor(self.GMM_PARAMS['means_']), tensor(self.GMM_PARAMS['covariances_']) 
+        
+        # print(mus)
+        MVNs = [MVN(mu, sigma) for (mu, sigma) in zip(mus, sigmas)]
+        with torch.no_grad():
+            z = self.Encoder(obs)
+            z = normalize_data(flatten(z).cpu().numpy(), self.latent_stats)
 
-        MVNs = [MVN(mu, diag(sigma)) for (mu, sigma) in zip(mus, sigmas)]
-        z = self.Encoder(obs)
-        z_norm = normalize_data(flatten(z).detach().cpu().numpy(), self.latent_stats)
-
-        z_norm = tensor(z_norm, requires_grad=True)
-        density = sum([exp(log_pi) * exp(MVN.log_prob(z_norm)) for (log_pi, MVN) in zip(log_pis, MVNs)])
-
-        z_norm.retain_grad()
+        z = tensor(z, requires_grad=True)
+        density = log(sum([pi * exp(MVN.log_prob(z)) for (pi, MVN) in zip(pis, MVNs)]))
+        z.retain_grad()
         density.backward()
+        # print(f'density: {density}')
 
         density_norm = 1/(1+exp(-(density+self.eps)/self.tau)) # parameterized sigmoid
         density_norm = density_norm.detach().cpu().numpy()
+        # print(f'density_norm: {density_norm}')
 
-        grad = unnormalize_gradient(z_norm.grad.detach().cpu().numpy(), self.latent_stats)
+
+        grad = unnormalize_gradient(z.grad.detach().cpu().numpy(), self.latent_stats)
+        # print(grad)
         grad_norm = grad/np.linalg.norm(grad)
+        # grad_norm = grad
+        # print(grad_norm)
 
         return density_norm, self.eta * grad_norm
-
-    def forward(self,obs,cond):
-        action = unnormalize_data(flatten(self.Policy(obs)).detach().cpu().numpy(), self.action_stats)
-        density, recovery_action = self.recovery_policy(obs,cond)
-        combined_action = density*action + (1-density)*recovery_action
-        return combined_action, density
-
-    def policy_only(self,obs):
-        action = unnormalize_data(flatten(self.Policy(obs)).detach().cpu().numpy(), self.action_stats)
-        return action

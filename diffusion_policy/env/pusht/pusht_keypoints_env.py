@@ -4,6 +4,8 @@ from diffusion_policy.env.pusht.pusht_env import PushTEnv
 from diffusion_policy.env.pusht.pymunk_keypoint_manager import PymunkKeypointManager
 import numpy as np
 
+import pygame
+
 class PushTKeypointsEnv(PushTEnv):
     def __init__(self,
             legacy=False,
@@ -16,14 +18,18 @@ class PushTKeypointsEnv(PushTEnv):
             reset_to_state=None,
             render_action=False,
             local_keypoint_map: Dict[str, np.ndarray]=None, 
-            color_map: Optional[Dict[str, np.ndarray]]=None):
+            color_map: Optional[Dict[str, np.ndarray]]=None,
+            display_rec=False,
+            rec_cfg=None):
         super().__init__(
             legacy=legacy, 
             block_cog=block_cog,
             damping=damping,
             render_size=render_size,
             reset_to_state=reset_to_state,
-            render_action=render_action)
+            render_action=render_action,
+            display_rec=display_rec,
+            rec_cfg=rec_cfg)
         ws = self.window_size
 
         if local_keypoint_map is None:

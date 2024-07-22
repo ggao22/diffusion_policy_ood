@@ -12,6 +12,13 @@ import cv2
 import skimage.transform as st
 from diffusion_policy.env.pusht.pymunk_override import DrawOptions
 
+import torch
+import os
+from torchvision import transforms
+from ood.models import EquivalenceMap, RecoveryPolicy
+import matplotlib.pyplot as plt
+
+
 
 def pymunk_to_shapely(body, shapes):
     geoms = list()
@@ -34,7 +41,9 @@ class PushTEnv(gym.Env):
             block_cog=None, damping=None,
             render_action=True,
             render_size=96,
-            reset_to_state=None
+            reset_to_state=None,
+            display_rec=False,
+            rec_cfg=None,
         ):
         self._seed = None
         self.seed()
@@ -83,6 +92,13 @@ class PushTEnv(gym.Env):
         self.render_buffer = None
         self.latest_action = None
         self.reset_to_state = reset_to_state
+
+        self.display_rec = display_rec
+        self.rec_vec = np.zeros((9,2))
+
+        if display_rec:
+            assert(rec_cfg is not None)
+            self.rec_policy = self._setup_rec_policy(rec_cfg)
     
     def reset(self):
         seed = self._seed
@@ -150,6 +166,27 @@ class PushTEnv(gym.Env):
                 act = mouse_position
             return act
         return TeleopAgent(act)
+    
+    def _setup_rec_policy(self, cfg):
+        encoder = EquivalenceMap(input_size=cfg["input_size"], output_size=cfg["action_dim"])
+
+        if torch.cuda.is_available():
+            encoder.cuda()
+            self.device = 'cuda'
+        else:
+            self.device = 'cpu'
+
+        encoder_ckpt = torch.load(os.path.join(cfg['testing_dir'], "encoder.pt"))
+        encoder.load_state_dict(encoder_ckpt['model_state_dict'])
+
+        gmm_params = np.load(os.path.join(cfg['testing_dir'], "gmm.npz"))
+        stats = np.load(os.path.join(cfg['testing_dir'], "stats.npz"), allow_pickle=True)
+        latent_stats = stats['latent_stats'][()]
+
+        print(type(latent_stats))
+        rec_policy = RecoveryPolicy(encoder, gmm_params, latent_stats, eps=cfg['eps'], tau=cfg['tau'], eta=cfg['eta'])
+        return rec_policy
+
 
     def _get_obs(self):
         obs = np.array(
@@ -204,15 +241,9 @@ class PushTEnv(gym.Env):
         # Draw agent and block.
         self.space.debug_draw(draw_options)
 
-        if mode == "human":
-            # The following line copies our drawings from `canvas` to the visible window
-            self.window.blit(canvas, canvas.get_rect())
-            pygame.event.pump()
-            pygame.display.update()
+        
 
-            # the clock is already ticked during in step for "human"
-
-
+        # Making Img Observation
         img = np.transpose(
                 np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2)
             )
@@ -226,8 +257,34 @@ class PushTEnv(gym.Env):
                 cv2.drawMarker(img, coord,
                     color=(255,0,0), markerType=cv2.MARKER_CROSS,
                     markerSize=marker_size, thickness=thickness)
+        
+
+        if self.display_rec:
+            # print(self.draw_kp_map)
+            kp = self.draw_kp_map['block']
+            dens, rec_vec = self.rec_policy(self._to_recovery_input(img).to(self.device))
+            self.rec_vec = (1-dens) * rec_vec.reshape(9,2) * 1000
+            print(rec_vec)
+
+            # pygame.draw.line(canvas, [0,0,255], kp.mean(axis=0), kp.mean(axis=0)+self.rec_vec.mean(axis=0), width=5)
+            
+            for i in range(self.rec_vec.shape[0]):
+                pygame.draw.line(canvas, [0,0,255], kp[i], kp[i]+self.rec_vec[i], width=5)
+
+
+        if mode == "human":
+            # The following line copies our drawings from `canvas` to the visible window
+            self.window.blit(canvas, canvas.get_rect())
+            pygame.event.pump()
+            pygame.display.update()
+
+            # the clock is already ticked during in step for "human"
+
         return img
 
+    def _to_recovery_input(self, img):
+        preprocess = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
+        return preprocess(img[:,:,[2,1,0]]).unsqueeze(0)
 
     def close(self):
         if self.window is not None:

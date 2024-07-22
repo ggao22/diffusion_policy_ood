@@ -19,19 +19,25 @@ def main(mode):
         "batch_size": 64,
 
         "num_test_traj": 8,
-        "n_components": 400,
-
+        "n_components": 5,
+        
+        "load_encoder": True,
         "encoder_max_epoch": 600,
         "encoder_loss_stop_threshold": 1.5e+3,
-        "encoder_lr": 5e-4,
+        "encoder_lr": 2e-4,
         "test_every": 50,
 
         # testing cfgs
-        'ood_datapath': '../data/pusht_demo_right.zarr',
-        'testing_dir': 'output/pusht_demo_left; 07-19-2024_16:14',
+        'ood_datapath': '/home/george/diffusion_policy/data/pusht_demo_right.zarr',
+        'testing_dir': '/home/george/diffusion_policy/ood/output/pusht_demo_left; 07-22-2024_15:30',
+
+        # rec cfg
+        "eps": -42,
+        "tau": 10,
+        "eta": 1.0
     }   
 
-    cfg["datapath"] = f'../data/{cfg["dataname"]}.zarr'
+    cfg["datapath"] = f'/home/george/diffusion_policy/data/{cfg["dataname"]}.zarr'
 
     if mode=='train':
         train_recovery_policy(cfg)

@@ -6,6 +6,7 @@ import torch
 from torchvision import transforms
 
 
+    
 # evaluating
 def eval_encoder(imgs, encoder, device):
     with torch.no_grad():
@@ -17,28 +18,8 @@ def eval_encoder(imgs, encoder, device):
         return latent_data
 
 
+
 # plotting
-def draw_3d_traj(zs, save_path):
-    fig = plt.figure(figsize=(18,12))
-    fig.subplots_adjust(top=0.92)
-    fig.tight_layout()
-    azims = [90]*6
-    elevs = [50]*6
-    for o in range(1,7):
-        ax = fig.add_subplot(2, 3, o, projection='3d')
-        x = zs[:,o-1]
-        y = zs[:,o]
-        z = zs[:,o+1]
-        for i in range(len(x)):
-            ax.scatter(x[i:i+1], y[i:i+1], z[i:i+1], color=plt.cm.rainbow(i/zs.shape[0]), s=30)
-            ax.set_xlabel('x')
-            ax.set_ylabel('y')
-            ax.set_zlabel('z')
-            ax.azim = azims[o-1]
-            ax.elev = elevs[o-1]
-    plt.savefig(os.path.join(save_path, "latent.png"))
-
-
 def draw_latent(zs, save_path):
     fig = plt.figure(figsize=(18,12))
     fig.tight_layout()
@@ -54,7 +35,7 @@ def draw_latent(zs, save_path):
     plt.savefig(save_path)
 
 
-def draw_ood_latent(zs, ood_zs, save_path):
+def draw_ood_latent(zs, ood_zs, save_path, grad_arrows=np.array(None), mu=np.array(None)):
     fig = plt.figure(figsize=(18,12))
     fig.tight_layout()
     for o in range(1,7):
@@ -63,10 +44,44 @@ def draw_ood_latent(zs, ood_zs, save_path):
         y = zs[:,2*(o-1)+1]
         oodx = ood_zs[:,2*(o-1)]
         oody = ood_zs[:,2*(o-1)+1]
-        for i in range(len(x)):
-            ax.scatter(x[i:i+1], y[i:i+1], color='tab:blue', s=30)
-            ax.scatter(oodx[i:i+1], oody[i:i+1], color='tab:red', s=30)
-            ax.set_xlabel('x')
-            ax.set_ylabel('y')
-            ax.set_title(f"Point {o}")
+        ax.scatter(x, y, color='tab:blue', s=30)
+        ax.scatter(oodx, oody, color='tab:red', s=30)
+        if grad_arrows.any():
+            gx = grad_arrows[:,2*(o-1)]
+            gy = grad_arrows[:,2*(o-1)+1]
+            gu = grad_arrows[:,2*(o-1)+18]
+            gv = grad_arrows[:,2*(o-1)+1+18]
+            ax.quiver(gx, gy, gu, gv)
+        if mu.any():
+            mux = mu[:,2*(o-1)]
+            muy = mu[:,2*(o-1)+1]
+            ax.scatter(mux, muy, color='tab:orange', s=100, alpha=0.6)
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_title(f"Point {o}")
     plt.savefig(save_path)
+
+
+
+# normalize data
+def get_data_stats(data):
+    data = data.reshape(-1,data.shape[-1])
+    stats = {
+        'min': np.min(data, axis=0),
+        'max': np.max(data, axis=0)
+    }
+    return stats
+
+def normalize_data(data, stats):
+    # nomalize to [0,1]
+    ndata = (data - stats['min']) / (stats['max'] - stats['min'])
+    return ndata
+
+def unnormalize_data(ndata, stats):
+    data = ndata * (stats['max'] - stats['min']) + stats['min']
+    return data
+
+def unnormalize_gradient(ndata, stats):
+    data = ndata * (stats['max'] - stats['min'])
+    return data
+

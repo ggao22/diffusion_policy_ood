@@ -1,30 +1,20 @@
+import sys
+import os
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
+
 import numpy as np
 import click
 from diffusion_policy.common.replay_buffer import ReplayBuffer
 from diffusion_policy.env.pusht.pusht_keypoints_env import PushTKeypointsEnv
 import pygame
 
-def condition(obs, side_len, pre_def='left'):
-    if pre_def=='left':
-        cond = lambda x: x > side_len//2
-    elif pre_def=='right':
-        cond = lambda x: x < side_len//2
-    else:
-        pass
-
-    keypoint = obs.reshape(2,-1)[0].reshape(-1,2)[:9]
-    for pt in keypoint:
-        if cond(pt[0]):
-            return False
-    return True
-
-
 @click.command()
-@click.option('-o', '--output', required=True)
 @click.option('-rs', '--render_size', default=96, type=int)
 @click.option('-hz', '--control_hz', default=10, type=int)
-def main(output, render_size, control_hz):
+def main(render_size, control_hz):
     """
+    TODO: update this
     Collect demonstration for the Push-T task.
     
     Usage: python demo_pusht.py -o data/pusht_demo.zarr
@@ -37,13 +27,43 @@ def main(output, render_size, control_hz):
     Press "R" to retry.
     Hold "Space" to pause.
     """
+    cfg = {
+        # main cfgs
+        "output_dir": "output",
+        "input_size": (96,96),
+        "dataname": "pusht_demo_left",
+        "action_dim": 18,
+
+        "num_workers": 2,
+        "batch_size": 64,
+
+        "num_test_traj": 8,
+        "n_components": 5,
+        
+        "load_encoder": True,
+        "encoder_max_epoch": 600,
+        "encoder_loss_stop_threshold": 1.5e+3,
+        "encoder_lr": 2e-4,
+        "test_every": 50,
+
+        # testing cfgs
+        'ood_datapath': '/home/george/diffusion_policy/data/pusht_demo_right.zarr',
+        'testing_dir': '/home/george/diffusion_policy/ood/output/pusht_demo_left; 07-22-2024_15:30',
+
+        # rec cfg
+        "eps": -42,
+        "tau": 10,
+        "eta": 1.0
+    }   
+
+    cfg["datapath"] = f'/home/george/diffusion_policy/data/{cfg["dataname"]}.zarr'
+
     
-    # create replay buffer in read-write mode
-    replay_buffer = ReplayBuffer.create_from_path(output, mode='a')
+    n_episodes = 0
 
     # create PushT env with keypoints
     kp_kwargs = PushTKeypointsEnv.genenerate_keypoint_manager_params()
-    env = PushTKeypointsEnv(render_size=render_size, render_action=False, **kp_kwargs)
+    env = PushTKeypointsEnv(render_size=render_size, render_action=False,  display_rec=True, rec_cfg=cfg, **kp_kwargs)
     agent = env.teleop_agent()
     clock = pygame.time.Clock()
     
@@ -51,20 +71,14 @@ def main(output, render_size, control_hz):
     while True:
         episode = list()
         # record in seed order, starting with 0
-        seed = replay_buffer.n_episodes
+        seed = n_episodes
+        print(f'starting seed {seed}')
 
         # set seed for env
         env.seed(seed)
         
         # reset env and get observations (including info and render for recording)
         obs = env.reset()
-        while not condition(obs, 512, 'right'):
-            seed += 2**12
-            env.seed(seed)
-            obs = env.reset()
-
-        print(f'starting seed {seed}')
-        
         info = env._get_info()
         img = env.render(mode='human')
         
@@ -103,22 +117,6 @@ def main(output, render_size, control_hz):
             # get action from mouse
             # None if mouse is not close to the agent
             act = agent.act(obs)
-            if not act is None:
-                # teleop started
-                # state dim 2+3
-                state = np.concatenate([info['pos_agent'], info['block_pose']])
-                # discard unused information such as visibility mask and agent pos
-                # for compatibility
-                keypoint = obs.reshape(2,-1)[0].reshape(-1,2)[:9]
-                # print(keypoint)
-                data = {
-                    'img': img,
-                    'state': np.float32(state),
-                    'keypoint': np.float32(keypoint),
-                    'action': np.float32(act),
-                    'n_contacts': np.float32([info['n_contacts']])
-                }
-                episode.append(data)
                 
             # step env and render
             obs, reward, done, info = env.step(act)
@@ -126,14 +124,10 @@ def main(output, render_size, control_hz):
             
             # regulate control frequency
             clock.tick(control_hz)
+
         if not retry:
-            # save episode buffer to replay buffer (on disk)
-            data_dict = dict()
-            for key in episode[0].keys():
-                data_dict[key] = np.stack(
-                    [x[key] for x in episode])
-            replay_buffer.add_episode(data_dict, compressors='disk')
-            print(f'saved seed {seed}')
+            print(f'done seed {seed}')
+            n_episodes += 1
         else:
             print(f'retry seed {seed}')
 
