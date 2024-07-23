@@ -21,7 +21,7 @@ from utils import draw_latent, eval_encoder
 def train_recovery_policy(cfg):
     # config
     now = datetime.now()
-    outpath = os.path.join(cfg["output_dir"], cfg["dataname"]+"; "+now.strftime("%m-%d-%Y_%H:%M"))
+    outpath = os.path.join(cfg["output_dir"], cfg["dataname"]+"_"+now.strftime("%m-%d-%Y_%H$%M"))
     os.makedirs(outpath, exist_ok=False)
 
     # data
@@ -39,7 +39,10 @@ def train_recovery_policy(cfg):
     # model
     encoder = EquivalenceMap(input_size=cfg["input_size"], output_size=cfg["action_dim"])
     # gmm = GmmFull(num_components=cfg["n_components"], num_dims=cfg["action_dim"])
-    gmm = GaussianMixture(n_components=cfg["n_components"])
+
+    gmms = []
+    for i in range(cfg["action_dim"]//cfg["space_dim"]):
+        gmms.append(GaussianMixture(n_components=cfg["n_components"]))
 
     if torch.cuda.is_available():
         encoder.cuda()
@@ -104,35 +107,38 @@ def train_recovery_policy(cfg):
 
     # fit gmm
     print("Fitting GMM.")
-    # gmm.fit(full_latent_data,
-    #         num_iterations=20000,
-    #         mixture_lr=1e1,
-    #         component_lr=1e1,
-    #         log_freq=100)
-
-    gmm.fit(full_latent_data)
-    gmm_params = {
-        "weights_": gmm.weights_,
-        "means_": gmm.means_,
-        "covariances_": gmm.covariances_,
-        "precisions_": gmm.precisions_,
-        "precisions_cholesky_": gmm.precisions_cholesky_,
-        "converged_": gmm.converged_,
-        "n_iter_": gmm.n_iter_,
-        "lower_bound_": gmm.lower_bound_,
-        "n_features_in_": gmm.n_features_in_,
-    }
+    gmms_params = {}
+    for i in range(len(gmms)):
+        gmm = gmms[i]
+        gmm.fit(full_latent_data[:,2*i:2*(i+1)])
+        gmm_params = {
+            "weights_": gmm.weights_,
+            "means_": gmm.means_,
+            "covariances_": gmm.covariances_,
+            "precisions_": gmm.precisions_,
+            "precisions_cholesky_": gmm.precisions_cholesky_,
+            "converged_": gmm.converged_,
+            "n_iter_": gmm.n_iter_,
+            "lower_bound_": gmm.lower_bound_,
+            "n_features_in_": gmm.n_features_in_,
+        }
+        gmms_params[str(i)] = gmm_params
+    
     # visualize gmm
     print("Visualizing GMM.")
-    gmm_latent, _ = gmm.sample(500)
-    # draw_latent(full_latent_data.cpu()[::2], os.path.join(outpath, "full_latent.png"))
-    draw_latent(gmm_latent, os.path.join(outpath, "gmm_latent.png"))
+    gmms_latent = []
+    for i in range(len(gmms)):
+        gmm = gmms[i]
+        gmm_latent, _ = gmm.sample(500)
+        gmms_latent.append(gmm_latent)
+    gmms_latent = np.hstack((gmms_latent))
+
+    draw_latent(full_latent_data[::4], os.path.join(outpath, "full_latent.png"))
+    draw_latent(gmms_latent, os.path.join(outpath, "gmms_latent.png"))
     
     # save gmm
-    np.savez(os.path.join(outpath, "gmm.npz"), **gmm_params)
-    # torch.save({
-    #     'model_state_dict'              : gmm.state_dict(),
-    #     }, os.path.join(outpath, "gmm.pt"))
+    np.savez(os.path.join(outpath, "gmms.npz"), **gmms_params)
+
 
 
     

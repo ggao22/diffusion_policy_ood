@@ -1,3 +1,7 @@
+import os
+import sys
+sys.path.append('ood/')
+
 import gym
 from gym import spaces
 
@@ -13,7 +17,6 @@ import skimage.transform as st
 from diffusion_policy.env.pusht.pymunk_override import DrawOptions
 
 import torch
-import os
 from torchvision import transforms
 from ood.models import EquivalenceMap, RecoveryPolicy
 import matplotlib.pyplot as plt
@@ -179,12 +182,10 @@ class PushTEnv(gym.Env):
         encoder_ckpt = torch.load(os.path.join(cfg['testing_dir'], "encoder.pt"))
         encoder.load_state_dict(encoder_ckpt['model_state_dict'])
 
-        gmm_params = np.load(os.path.join(cfg['testing_dir'], "gmm.npz"))
+        gmms_params = np.load(os.path.join(cfg['testing_dir'], "gmms.npz"), allow_pickle=True)
         stats = np.load(os.path.join(cfg['testing_dir'], "stats.npz"), allow_pickle=True)
         latent_stats = stats['latent_stats'][()]
-
-        print(type(latent_stats))
-        rec_policy = RecoveryPolicy(encoder, gmm_params, latent_stats, eps=cfg['eps'], tau=cfg['tau'], eta=cfg['eta'])
+        rec_policy = RecoveryPolicy(encoder, gmms_params, latent_stats, eps=cfg['eps'], tau=cfg['tau'], eta=cfg['eta'])
         return rec_policy
 
 
@@ -262,14 +263,18 @@ class PushTEnv(gym.Env):
         if self.display_rec:
             # print(self.draw_kp_map)
             kp = self.draw_kp_map['block']
+            # plt.imshow(img[:,:,[2,1,0]])
+            # plt.show()
             dens, rec_vec = self.rec_policy(self._to_recovery_input(img).to(self.device))
-            self.rec_vec = (1-dens) * rec_vec.reshape(9,2) * 1000
+            print(f'before {rec_vec}')
+            print(f'after {(1-dens)*rec_vec}')
+            self.rec_vec = ((1-dens)*rec_vec).reshape(9,2) * 1
             print(rec_vec)
 
-            # pygame.draw.line(canvas, [0,0,255], kp.mean(axis=0), kp.mean(axis=0)+self.rec_vec.mean(axis=0), width=5)
+            pygame.draw.line(canvas, [0,0,255], kp.mean(axis=0), kp.mean(axis=0)+self.rec_vec.mean(axis=0), width=5)
             
-            for i in range(self.rec_vec.shape[0]):
-                pygame.draw.line(canvas, [0,0,255], kp[i], kp[i]+self.rec_vec[i], width=5)
+            # for i in range(self.rec_vec.shape[0]):
+            #     pygame.draw.line(canvas, [0,0,255], kp[i], kp[i]+self.rec_vec[i], width=5)
 
 
         if mode == "human":
