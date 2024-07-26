@@ -189,7 +189,7 @@ class PushTKeypointsRunner(BaseLowdimRunner):
                 args_list=[(x,) for x in this_init_fns])
 
             # start rollout
-            obs = env.reset()
+            obs = env.reset()  
             past_action = None
             policy.reset()
 

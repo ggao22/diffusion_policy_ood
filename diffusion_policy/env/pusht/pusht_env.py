@@ -1,6 +1,4 @@
 import os
-import sys
-sys.path.append('ood/')
 
 import gym
 from gym import spaces
@@ -258,6 +256,7 @@ class PushTEnv(gym.Env):
                 cv2.drawMarker(img, coord,
                     color=(255,0,0), markerType=cv2.MARKER_CROSS,
                     markerSize=marker_size, thickness=thickness)
+                
         
 
         if self.display_rec:
@@ -271,11 +270,16 @@ class PushTEnv(gym.Env):
             self.rec_vec = ((1-dens)*rec_vec).reshape(9,2) * 1
             print(rec_vec)
 
-            pygame.draw.line(canvas, [0,0,255], kp.mean(axis=0), kp.mean(axis=0)+self.rec_vec.mean(axis=0), width=5)
+            pygame.draw.line(canvas, [255,0,0], kp.mean(axis=0), kp.mean(axis=0)+self.rec_vec.mean(axis=0), width=5)
             
             # for i in range(self.rec_vec.shape[0]):
             #     pygame.draw.line(canvas, [0,0,255], kp[i], kp[i]+self.rec_vec[i], width=5)
 
+            cv2.line(img, (kp.mean(axis=0)/512 * 96).astype(int), ((kp.mean(axis=0)+self.rec_vec.mean(axis=0))/512 * 96).astype(int), color=[255,0,0], thickness=2)
+
+            # for i in range(self.rec_vec.shape[0]):
+            #     cv2.line(img, (kp[i]/512 * 96).astype(int), ((kp[i]+self.rec_vec[i])/512 * 96).astype(int), color=[255,0,0], thickness=1)
+        
 
         if mode == "human":
             # The following line copies our drawings from `canvas` to the visible window

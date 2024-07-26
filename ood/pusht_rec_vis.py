@@ -8,6 +8,7 @@ import click
 from diffusion_policy.common.replay_buffer import ReplayBuffer
 from diffusion_policy.env.pusht.pusht_keypoints_env import PushTKeypointsEnv
 import pygame
+import cv2
 
 from config import cfg
 
@@ -40,6 +41,7 @@ def main(render_size, control_hz):
     
     # episode-level while loop
     while True:
+        images = []
         episode = list()
         # record in seed order, starting with 0
         seed = n_episodes
@@ -92,13 +94,21 @@ def main(render_size, control_hz):
             # step env and render
             obs, reward, done, info = env.step(act)
             img = env.render(mode='human')
+            images.append(img)
             
             # regulate control frequency
             clock.tick(control_hz)
 
         if not retry:
             print(f'done seed {seed}')
+            imgs_save_path = os.path.join(cfg['testing_dir'], f'video{n_episodes}')
+            os.makedirs(imgs_save_path, exist_ok=True)
+            for i in range(len(images)):
+                video_path = os.path.join(imgs_save_path, f'{i}.png')
+                cv2.imwrite(video_path, images[i][:,:,[2,1,0]])
+        
             n_episodes += 1
+
         else:
             print(f'retry seed {seed}')
 

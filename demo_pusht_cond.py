@@ -51,14 +51,14 @@ def main(output, render_size, control_hz):
     while True:
         episode = list()
         # record in seed order, starting with 0
-        seed = replay_buffer.n_episodes
+        seed = replay_buffer.n_episodes + 1000
 
         # set seed for env
         env.seed(seed)
         
         # reset env and get observations (including info and render for recording)
         obs = env.reset()
-        while not condition(obs, 512, 'right'):
+        while not condition(obs, 512, 'left'):
             seed += 2**12
             env.seed(seed)
             obs = env.reset()

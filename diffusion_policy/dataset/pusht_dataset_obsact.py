@@ -25,7 +25,7 @@ class PushTLowdimObsactDataset(BaseLowdimDataset):
         super().__init__()
         self.replay_buffer = ReplayBuffer.copy_from_path(
             zarr_path, keys=[obs_key, state_key, action_key])
-
+        
         val_mask = get_val_mask(
             n_episodes=self.replay_buffer.n_episodes, 
             val_ratio=val_ratio,
@@ -77,11 +77,12 @@ class PushTLowdimObsactDataset(BaseLowdimDataset):
 
     def _sample_to_data(self, sample):
         keypoint = sample[self.obs_key]
-        state = sample[self.state_key]
-        agent_pos = state[:,:2]
-        obs = np.concatenate([
-            keypoint.reshape(keypoint.shape[0], -1), 
-            agent_pos], axis=-1)
+        # state = sample[self.state_key]
+        # agent_pos = state[:,:2]
+        # obs = np.concatenate([
+        #     keypoint.reshape(keypoint.shape[0], -1), 
+        #     agent_pos], axis=-1)
+        obs = keypoint.reshape(keypoint.shape[0], -1)
 
         data = {
             'obs': obs, # T, D_o
@@ -91,11 +92,18 @@ class PushTLowdimObsactDataset(BaseLowdimDataset):
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         sample = self.sampler.sample_sequence(idx)
-        print()
-        print(sample['keypoint'].shape)
-        print(sample['state'].shape)
-        print(sample['action'].shape)
         data = self._sample_to_data(sample)
+        data = self.__centralize_data(data)
 
         torch_data = dict_apply(data, torch.from_numpy)
         return torch_data
+
+    def __centralize_data(self, data, canvas_size=512):
+        obs = data['obs'].reshape(-1,9,2)
+        act = data['action']
+        chunk_mean = obs[0].mean(axis=0)
+        centralized_obs = obs - chunk_mean + np.array([canvas_size//2, canvas_size//2])
+        centralized_act = act - chunk_mean + np.array([canvas_size//2, canvas_size//2])
+        data['obs'] = centralized_obs.reshape(-1,18)
+        data['action'] = centralized_act
+        return data 
