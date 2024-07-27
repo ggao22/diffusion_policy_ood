@@ -41,7 +41,8 @@ class EquivalenceMap(nn.Module):
     def action_loss(self, z, z_prime, action):
         return torch.sum(torch.norm(z_prime - z - action, dim=1)**2)
 
-
+    def position_loss(self, z, pos):
+        return torch.sum(torch.norm(z - pos, dim=1)**2)
 
 
 def calculate_matmul_n_times(n_components, mat_a, mat_b):
@@ -152,19 +153,22 @@ class RecoveryPolicy(nn.Module):
             pdf = float(pdf.detach().cpu())
             densities.append([pdf]*2)
         return np.array(densities).flatten()
-
-    def forward(self,obs):
+    
+    def _encoder(self,obs):
         with torch.no_grad():
             z = self.Encoder(obs)
             z = normalize_data(flatten(z).cpu().numpy(), self.latent_stats)
+        return z
 
+    def forward(self,obs):
+        z = self._encoder(obs)
+        densities, grad = self._get_grad(z)
+        return densities, self.eta * grad
+    
+    def _get_grad(self, z):
         z = tensor(z, requires_grad=True)
         densities = self.pdfs(z)
-        print()
-        print(f'densities: {densities}')
-
-        density_norm = 1/(1+np.exp(-(densities+self.eps)/self.tau)) # parameterized sigmoid
-        print(f'density_norm: {density_norm}')
+        densities_norm = 1/(1+np.exp(-(densities+self.eps)/self.tau)) # parameterized sigmoid
 
         grad = unnormalize_gradient(z.grad.detach().cpu().numpy(), self.latent_stats)
         negexp_grad = np.copy(grad)
@@ -172,7 +176,8 @@ class RecoveryPolicy(nn.Module):
             grad_kp = grad[2*i:2*(i+1)]
             grad_kp_norm = grad_kp/np.linalg.norm(grad_kp)
             mag = np.exp((-np.linalg.norm(grad_kp)+5500)/1100)
-            print(np.linalg.norm(grad_kp))
             negexp_grad[2*i:2*(i+1)] = grad_kp_norm*mag
 
-        return density_norm, self.eta * negexp_grad
+        return densities_norm, negexp_grad
+
+

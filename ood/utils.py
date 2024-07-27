@@ -51,7 +51,7 @@ def draw_ood_latent(zs, ood_zs, save_path, grad_arrows=np.array(None), mu=np.arr
             gy = grad_arrows[:,2*(o-1)+1]
             gu = grad_arrows[:,2*(o-1)+18]
             gv = grad_arrows[:,2*(o-1)+1+18]
-            ax.quiver(gx, gy, gu, gv, angles='xy', scale_units='xy', scale=1)
+            ax.quiver(gx, gy, gu, gv, angles='xy', scale_units='xy', scale=5, alpha=0.6)
         if mu.any():
             mux = mu[:,2*(o-1)]
             muy = mu[:,2*(o-1)+1]

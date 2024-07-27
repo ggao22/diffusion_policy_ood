@@ -9,10 +9,9 @@ from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 
 
-from dataset import ObsActPairs
+from dataset import ObsActPairs, ObsPosPairs
 from models import EquivalenceMap
 from utils import get_data_stats, normalize_data
-from src.model.full import GmmFull
 from sklearn.mixture import GaussianMixture
 from utils import draw_latent, eval_encoder
 
@@ -25,7 +24,13 @@ def train_recovery_policy(cfg):
     os.makedirs(outpath, exist_ok=False)
 
     # data
-    encoder_dataset = ObsActPairs(datapath=cfg["datapath"])
+    if cfg['loss_type'] == 'action':
+        encoder_dataset = ObsActPairs(datapath=cfg["datapath"])
+    elif cfg['loss_type'] == 'position':
+        encoder_dataset = ObsPosPairs(datapath=cfg["datapath"])
+    else:
+        raise Exception('Not Implemented')
+    
     encoder_loader = DataLoader(encoder_dataset,
                                 batch_size=cfg["batch_size"],
                                 num_workers=cfg["num_workers"],
@@ -71,12 +76,19 @@ def train_recovery_policy(cfg):
                     for batch in tepoch:
                         encoder_optim.zero_grad()
 
-                        s, s_prime, action = batch
-                        s, s_prime, action = s.to(device), s_prime.to(device), action.to(device)
-
-                        z, z_prime = encoder(s), encoder(s_prime)
-
-                        loss = encoder.action_loss(z, z_prime, action)
+                        if cfg['loss_type'] == 'action':
+                            s, s_prime, action = batch
+                            s, s_prime, action = s.to(device), s_prime.to(device), action.to(device)
+                            z, z_prime = encoder(s), encoder(s_prime)
+                            loss = encoder.action_loss(z, z_prime, action)
+                        elif cfg['loss_type'] == 'position':
+                            s, position = batch
+                            s, position = s.to(device), position.to(device)
+                            z = encoder(s)
+                            loss = encoder.position_loss(z, position)
+                        else:
+                            raise Exception('Not Implemented')
+                        
                         loss.backward()
                         encoder_optim.step()
 

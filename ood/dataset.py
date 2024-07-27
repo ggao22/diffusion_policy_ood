@@ -33,5 +33,27 @@ class ObsActPairs(Dataset):
 
     def __len__(self):
         return len(self.image_dataset)
+    
+
+class ObsPosPairs(Dataset):
+    def __init__(self, datapath=None,
+                 preprocess=transforms.Compose([transforms.ToPILImage(),
+                                                    transforms.ToTensor()])):
+        super().__init__()
+        assert(datapath is not None)
+        data = zarr.open(datapath,'r')
+        self.image_dataset = np.array(data['data']['img'])[:,:,:,[2,1,0]]
+        self.position_dataset = np.array(data['data']['keypoint'])
+        print(self.position_dataset.shape)
+        self.end_indices = np.array(data['meta']['episode_ends']).astype(int)-1
+        self.transforms = preprocess
+
+    def __getitem__(self, index):
+        img = self.transforms(self.image_dataset[index])
+        pos = self.position_dataset[index].flatten()
+        return img, pos
+
+    def __len__(self):
+        return len(self.image_dataset)
 
 
