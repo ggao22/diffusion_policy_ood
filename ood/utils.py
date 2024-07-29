@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import torch
 from torchvision import transforms
 
-
     
 # evaluating
 def eval_encoder(imgs, encoder, device):
@@ -16,7 +15,6 @@ def eval_encoder(imgs, encoder, device):
             latent_data.append(encoder(preprocess(imgs[i]).unsqueeze(0).to(device)).detach().cpu().numpy())
         latent_data = torch.from_numpy(np.vstack((latent_data)))
         return latent_data
-
 
 
 # plotting
@@ -85,3 +83,37 @@ def unnormalize_gradient(ndata, stats):
     data = ndata * (stats['max'] - stats['min'])
     return data
 
+
+# centering kp
+def get_center_pos(kp):
+    center_pos = kp.mean(axis=0)
+    return center_pos
+
+def get_center_ang(kp):
+    pt = kp[3]
+    center_pos = get_center_pos(kp)
+    centered_pt = pt - center_pos
+    center_ang = np.arctan2(centered_pt[1],centered_pt[0])
+    return center_ang
+
+def centralize(traj, pos, ang):
+    assert traj.shape[-1] == 2
+
+    # center pos
+    traj = traj - pos
+
+    # center angle
+    correction_ang = -ang - np.pi/2
+    rot_mat = np.array([
+        [np.cos(correction_ang),-np.sin(correction_ang)],
+        [np.sin(correction_ang),np.cos(correction_ang)]
+    ])
+    for i in range(len(traj)):
+        pts = traj[i]
+        if len(pts.shape)==2:
+            pts = np.swapaxes(pts,0,1)
+            pts = rot_mat @ pts
+            traj[i] = np.swapaxes(pts,0,1)
+        else:
+            traj[i] = rot_mat @ pts
+    return traj

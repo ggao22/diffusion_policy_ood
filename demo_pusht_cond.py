@@ -51,7 +51,7 @@ def main(output, render_size, control_hz):
     while True:
         episode = list()
         # record in seed order, starting with 0
-        seed = replay_buffer.n_episodes + 1000
+        seed = replay_buffer.n_episodes
 
         # set seed for env
         env.seed(seed)

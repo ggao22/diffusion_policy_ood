@@ -212,7 +212,8 @@ class PushTEnv(gym.Env):
             'vel_agent': np.array(self.agent.velocity),
             'block_pose': np.array(list(self.block.position) + [self.block.angle]),
             'goal_pose': self.goal_pose,
-            'n_contacts': n_contact_points_per_step}
+            'n_contacts': n_contact_points_per_step,
+            'rec_vec': self.rec_vec}
         return info
 
     def _render_frame(self, mode):
@@ -260,22 +261,16 @@ class PushTEnv(gym.Env):
         
 
         if self.display_rec:
-            # print(self.draw_kp_map)
             kp = self.draw_kp_map['block']
-            # plt.imshow(img[:,:,[2,1,0]])
-            # plt.show()
             dens, rec_vec = self.rec_policy(self._to_recovery_input(img).to(self.device))
-            print(f'before {rec_vec}')
-            print(f'after {(1-dens)*rec_vec}')
             self.rec_vec = ((1-dens)*rec_vec).reshape(9,2) * 1
-            print(rec_vec)
 
             pygame.draw.line(canvas, [255,0,0], kp.mean(axis=0), kp.mean(axis=0)+self.rec_vec.mean(axis=0), width=5)
             
             # for i in range(self.rec_vec.shape[0]):
             #     pygame.draw.line(canvas, [0,0,255], kp[i], kp[i]+self.rec_vec[i], width=5)
 
-            cv2.line(img, (kp.mean(axis=0)/512 * 96).astype(int), ((kp.mean(axis=0)+self.rec_vec.mean(axis=0))/512 * 96).astype(int), color=[255,0,0], thickness=2)
+            cv2.line(img, (kp.mean(axis=0)/512 * self.render_size).astype(int), ((kp.mean(axis=0)+self.rec_vec.mean(axis=0))/512 * self.render_size).astype(int), color=[255,0,0], thickness=2)
 
             # for i in range(self.rec_vec.shape[0]):
             #     cv2.line(img, (kp[i]/512 * 96).astype(int), ((kp[i]+self.rec_vec[i])/512 * 96).astype(int), color=[255,0,0], thickness=1)
@@ -292,6 +287,7 @@ class PushTEnv(gym.Env):
         return img
 
     def _to_recovery_input(self, img):
+        img = cv2.resize(img, (96, 96))
         preprocess = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
         return preprocess(img[:,:,[2,1,0]]).unsqueeze(0)
 
