@@ -96,7 +96,7 @@ def get_center_ang(kp):
     center_ang = np.arctan2(centered_pt[1],centered_pt[0])
     return center_ang
 
-def centralize(traj, pos, ang):
+def centralize(traj, pos, ang, screen_size):
     assert traj.shape[-1] == 2
 
     # center pos
@@ -116,4 +116,55 @@ def centralize(traj, pos, ang):
             traj[i] = np.swapaxes(pts,0,1)
         else:
             traj[i] = rot_mat @ pts
+            
+    traj = traj + np.array([screen_size//2, screen_size//2])
     return traj
+
+def centralize_grad(traj, ang):
+    assert traj.shape[-1] == 2
+
+    # center angle
+    correction_ang = -ang - np.pi/2
+    rot_mat = np.array([
+        [np.cos(correction_ang),-np.sin(correction_ang)],
+        [np.sin(correction_ang),np.cos(correction_ang)]
+    ])
+    for i in range(len(traj)):
+        pts = traj[i]
+        if len(pts.shape)==2:
+            pts = np.swapaxes(pts,0,1)
+            pts = rot_mat @ pts
+            traj[i] = np.swapaxes(pts,0,1)
+        else:
+            traj[i] = rot_mat @ pts
+            
+    return traj
+
+
+
+def decentralize(traj, pos, ang, screen_size):
+    # inverse of centralize #
+    traj = traj - np.array([screen_size//2, screen_size//2])
+
+    # decenter angle
+    correction_ang = -(-ang - np.pi/2)
+    rot_mat = np.array([
+        [np.cos(correction_ang),-np.sin(correction_ang)],
+        [np.sin(correction_ang),np.cos(correction_ang)]
+    ])
+    for i in range(len(traj)):
+        pts = traj[i]
+        if len(pts.shape)==2:
+            pts = np.swapaxes(pts,0,1)
+            pts = rot_mat @ pts
+            traj[i] = np.swapaxes(pts,0,1)
+        else:
+            traj[i] = rot_mat @ pts
+    
+    # decenter pos
+    traj = traj + pos
+    return traj
+
+    
+    
+    

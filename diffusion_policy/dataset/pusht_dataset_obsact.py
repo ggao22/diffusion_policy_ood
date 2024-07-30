@@ -9,6 +9,8 @@ from diffusion_policy.common.sampler import (
 from diffusion_policy.model.common.normalizer import LinearNormalizer
 from diffusion_policy.dataset.base_dataset import BaseLowdimDataset
 
+from ood.utils import get_center_pos, get_center_ang, centralize
+
 class PushTLowdimObsactDataset(BaseLowdimDataset):
     def __init__(self, 
             zarr_path, 
@@ -101,9 +103,12 @@ class PushTLowdimObsactDataset(BaseLowdimDataset):
     def __centralize_data(self, data, canvas_size=512):
         obs = data['obs'].reshape(-1,9,2)
         act = data['action']
-        chunk_mean = obs[0].mean(axis=0)
-        centralized_obs = obs - chunk_mean + np.array([canvas_size//2, canvas_size//2])
-        centralized_act = act - chunk_mean + np.array([canvas_size//2, canvas_size//2])
-        data['obs'] = centralized_obs.reshape(-1,18)
-        data['action'] = centralized_act
+
+        center_pos = get_center_pos(obs[0])
+        center_ang = get_center_ang(obs[0])
+        centered_obs = centralize(obs, center_pos, center_ang, screen_size=canvas_size)
+        centered_act = centralize(act, center_pos, center_ang, screen_size=canvas_size)
+
+        data['obs'] = centered_obs.reshape(-1,18)
+        data['action'] = centered_act
         return data 

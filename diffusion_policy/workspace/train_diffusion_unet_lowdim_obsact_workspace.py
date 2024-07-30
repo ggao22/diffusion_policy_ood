@@ -241,7 +241,7 @@ class TrainDiffusionUnetLowdimObsactWorkspace(BaseWorkspace):
                     with torch.no_grad():
                         # sample trajectory from training set, and evaluate difference
                         batch = train_sampling_batch
-                        obs_dict = {'obs': batch['obs']}
+                        obs_dict = {'obs': batch['obs'], 'init_action': batch['action'][:,0,:]}
                         gt_action = batch['action']
                         
                         result = policy.predict_action(obs_dict)

@@ -22,6 +22,8 @@ from diffusion_policy.dataset.base_dataset import BaseLowdimDataset
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.env.pusht.pusht_keypoints_env import PushTKeypointsEnv
 
+from ood.utils import get_center_pos, get_center_ang, centralize, centralize_grad, decentralize
+
 import pygame
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation  
@@ -33,7 +35,8 @@ from ood.config import cfg as rec_cfg
 @click.option('-c', '--checkpoint', required=True)
 @click.option('-o', '--output_dir', required=True)
 @click.option('-d', '--device', default='cuda:0')
-def main(checkpoint, output_dir, device):
+@click.option('-s', '--screen_size', default=512)
+def main(checkpoint, output_dir, device, screen_size):
     if os.path.exists(output_dir):
         click.confirm(f"Output path {output_dir} already exists! Overwrite?", abort=True)
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -46,7 +49,7 @@ def main(checkpoint, output_dir, device):
     workspace: BaseWorkspace
     workspace.load_payload(payload, exclude_keys=None, include_keys=None)
     
-    pltscreen = (np.ones((512,512,3)) * 255).astype(int)
+    pltscreen = (np.ones((screen_size,screen_size,3)) * 255).astype(int)
     fig, (ax1, ax2) = plt.subplots(1,2)
 
     def animate(args):
@@ -77,57 +80,68 @@ def main(checkpoint, output_dir, device):
 
     # create PushT env with keypoints
     kp_kwargs = PushTKeypointsEnv.genenerate_keypoint_manager_params()
-    env = PushTKeypointsEnv(render_size=512, render_action=False,  display_rec=True, rec_cfg=rec_cfg, **kp_kwargs)
+    env = PushTKeypointsEnv(render_size=screen_size, render_action=False,  display_rec=True, rec_cfg=rec_cfg, **kp_kwargs)
     clock = pygame.time.Clock()
-    env.seed(73)
-    env.rec_policy.eta = 1.0
-    obs = env.reset()
-    info = env._get_info()
-    img = env.render(mode='human')
 
-    # env policy control
-    max_iter = 20
-    action_horizon = 12
     obs_in = []
     act_out = []
     env_imgs = []
-    for _ in range(max_iter):
-        kps = obs[:18].reshape(9,2)
-        rec_vec = info['rec_vec']
-        kp_traj, kp_center = generate_kp_traj(kps, rec_vec, horizon=16, delay=8)
+    for n in range(10):
+        env.seed(n)
+        env.rec_policy.eta = 1.0
+        obs = env.reset()
+        info = env._get_info()
+        img = env.render(mode='human')
 
-        np_obs_dict = {
-            'obs': np.expand_dims(kp_traj.reshape(16,18),0).astype(np.float32),
-        }
-        obs_in.append(kp_traj[:action_horizon])
+        # env policy control
+        max_iter = 10
+        action_horizon = 16
+        for _ in range(max_iter):
+            kp = obs[:18].reshape(9,2)
+            rec_vec = info['rec_vec']
 
-        # device transfer
-        obs_dict = dict_apply(np_obs_dict, 
-            lambda x: torch.from_numpy(x).to(
-                device=device))
+            center_pos = get_center_pos(kp)
+            center_ang = get_center_ang(kp)
+            kp_start = centralize(kp, center_pos, center_ang, screen_size) #9,2
+            rec_vec = centralize_grad(rec_vec, center_ang) #9,2
+            kp_traj = generate_kp_traj(kp_start, rec_vec, horizon=16, delay=10)
 
-        # # run policy
-        with torch.no_grad():
-            action_dict = policy.predict_action(obs_dict)
+            init_action = centralize(np.expand_dims(info['pos_agent'],0), center_pos, center_ang, screen_size)
 
-        # # device_transfer
-        np_action_dict = dict_apply(action_dict,
-            lambda x: x.detach().to('cpu').numpy())
+            np_obs_dict = {
+                'obs': np.expand_dims(kp_traj.reshape(16,18),0).astype(np.float32),
+                'init_action': init_action.astype(np.float32)
+            }
+            obs_in.append(kp_traj[:action_horizon])
 
-        np_action = np_action_dict['action_pred'].squeeze(0)
-        act_out.append(np_action[:action_horizon])
+            # device transfer
+            obs_dict = dict_apply(np_obs_dict, 
+                lambda x: torch.from_numpy(x).to(
+                    device=device))
 
-        # step env and render
-        for i in range(action_horizon):
+            # # run policy
+            with torch.no_grad():
+                action_dict = policy.predict_action(obs_dict)
+
+            # # device_transfer
+            np_action_dict = dict_apply(action_dict,
+                lambda x: x.detach().to('cpu').numpy())
+
+            np_action = np_action_dict['action_pred'].squeeze(0)
+            act_out.append(np_action[:action_horizon])
+            np_action = decentralize(np_action, center_pos, center_ang, screen_size)
+
             # step env and render
-            act = np_action[i] + kp_center
-            obs, reward, done, info = env.step(act)
-            img = env.render(mode='human')
-            env_imgs.append(img)
+            for i in range(action_horizon):
+                # step env and render
+                act = np_action[i]
+                obs, reward, done, info = env.step(act)
+                img = env.render(mode='human')
+                env_imgs.append(img)
 
-        # regulate control frequency
-        control_hz = 10
-        clock.tick(control_hz)
+            # regulate control frequency
+            control_hz = 10
+            clock.tick(control_hz)
 
     obs_in = np.vstack((obs_in))
     act_out = np.vstack((act_out))
@@ -136,17 +150,13 @@ def main(checkpoint, output_dir, device):
     plt.show()
 
 
-def generate_kp_traj(kp, recovery_vec, horizon, delay, alpha=0.5):
-    kp_mean = kp.mean(axis=0)
-    kp_center = kp_mean - np.array([512//2, 512//2])
-    kp_start = kp - kp_center
-    kp_base = np.repeat([kp_start], horizon, axis=0)
-
+def generate_kp_traj(kp_start, recovery_vec, horizon, delay, alpha=0.01):
+    kp_base = np.repeat([kp_start], horizon, axis=0) # horizon,9,2
     mean_recovery_vec = recovery_vec.mean(axis=0) * alpha
-    motion_vecs = np.repeat([mean_recovery_vec], horizon-delay, axis=0)
-    motion_vecs = np.vstack((np.zeros((delay, 2)),motion_vecs))
+    motion_vecs = np.repeat([mean_recovery_vec], horizon-delay, axis=0) 
+    motion_vecs = np.vstack((np.zeros((delay, 2)),motion_vecs)) # horizon,2
     vecs = np.repeat(np.cumsum(motion_vecs, axis=0), 9, axis=0).reshape(horizon, 9, 2)
-    return kp_base + vecs, kp_center
+    return kp_base + vecs
 
 
 if __name__ == '__main__':

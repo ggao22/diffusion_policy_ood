@@ -10,7 +10,7 @@ from diffusion_policy.policy.base_lowdim_policy import BaseLowdimPolicy
 from diffusion_policy.model.diffusion.conditional_unet1d import ConditionalUnet1D
 from diffusion_policy.model.diffusion.mask_generator import LowdimMaskGenerator
 
-class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
+class DiffusionUnetLowdimObsactPolicy(BaseLowdimPolicy):
     def __init__(self, 
             model: ConditionalUnet1D,
             noise_scheduler: DDPMScheduler,
@@ -23,6 +23,7 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
             obs_as_local_cond=False,
             obs_as_global_cond=False,
             pred_action_steps_only=False,
+            initial_action_condition=False,
             oa_step_convention=False,
             # parameters passed to step
             **kwargs):
@@ -48,6 +49,7 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
         self.obs_as_local_cond = obs_as_local_cond
         self.obs_as_global_cond = obs_as_global_cond
         self.pred_action_steps_only = pred_action_steps_only
+        self.initial_action_condition = initial_action_condition
         self.oa_step_convention = oa_step_convention
         self.kwargs = kwargs
 
@@ -105,7 +107,9 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
         assert 'obs' in obs_dict
         assert 'past_action' not in obs_dict # not implemented yet
         nobs = self.normalizer['obs'].normalize(obs_dict['obs'])
-
+        if self.initial_action_condition:
+            assert 'init_action' in obs_dict
+            ninit_action = self.normalizer['action'].normalize(obs_dict['init_action']) # batch, 2
         B, _, Do = nobs.shape
         To = self.n_obs_steps
         assert Do == self.obs_dim
@@ -130,6 +134,8 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
         elif self.obs_as_global_cond:
             # condition throught global feature
             global_cond = nobs[:,:To].reshape(nobs.shape[0], -1)
+            if self.initial_action_condition:
+                global_cond = torch.hstack((ninit_action, global_cond))
             shape = (B, T, Da)
             if self.pred_action_steps_only:
                 shape = (B, self.n_action_steps, Da)
@@ -187,6 +193,7 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
         nbatch = self.normalizer.normalize(batch)
         obs = nbatch['obs']
         action = nbatch['action']
+        # print((action[:,0,:] == self.normalizer['action'].normalize(batch['action'][:,0,:])).all())
 
         # handle different ways of passing observation
         local_cond = None
@@ -199,6 +206,9 @@ class DiffusionUnetLowdimPolicy(BaseLowdimPolicy):
         elif self.obs_as_global_cond:
             global_cond = obs[:,:self.n_obs_steps,:].reshape(
                 obs.shape[0], -1)
+            if self.initial_action_condition:
+                initial_action = action[:,0,:]
+                global_cond = torch.hstack((initial_action, global_cond))
             if self.pred_action_steps_only:
                 To = self.n_obs_steps
                 start = To
