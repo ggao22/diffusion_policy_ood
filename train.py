@@ -28,6 +28,8 @@ def main(cfg: OmegaConf):
     OmegaConf.resolve(cfg)
 
     cls = hydra.utils.get_class(cfg._target_)
+    resume_output_dir = 'data/outputs/2024.08.01/10.00.59_train_diffusion_unet_image_pusht_image'
+    workspace: BaseWorkspace = cls(cfg,resume_output_dir)
     workspace: BaseWorkspace = cls(cfg)
     workspace.run()
 

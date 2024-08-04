@@ -6,7 +6,7 @@ import numpy as np
 
 import pygame
 
-class PushTKeypointsEnv(PushTEnv):
+class PushTKeypointsImageEnv(PushTEnv):
     def __init__(self,
             legacy=False,
             block_cog=None, 
@@ -109,18 +109,35 @@ class PushTKeypointsEnv(PushTEnv):
             draw_kp_map['agent'] = vis_kps[len(kp_map['block']):]
         self.draw_kp_map = draw_kp_map
         
-        # construct obs
-        obs = kps.flatten()
-        obs_mask = kps_mask.flatten()
-        if not self.agent_keypoints:
-            # passing agent position when keypoints are not available
-            agent_pos = np.array(self.agent.position)
-            obs = np.concatenate([
-                obs, agent_pos
-            ])
-            obs_mask = np.concatenate([
-                obs_mask, np.ones((2,), dtype=bool)
-            ])
+        # construct kps
+        kps = kps.flatten()
+        kps_mask = kps_mask.flatten()
+        # if not self.agent_keypoints:
+        #     # passing agent position when keypoints are not available
+        #     agent_pos = np.array(self.agent.position)
+        #     obs = np.concatenate([
+        #         obs, agent_pos
+        #     ])
+        #     obs_mask = np.concatenate([
+        #         obs_mask, np.ones((2,), dtype=bool)
+        #     ])
+
+        # kps, kps_mask
+        kps = np.concatenate([
+            kps, kps_mask.astype(kps.dtype)
+        ], axis=0)
+
+        # get img
+        img = super()._render_frame(mode='rgb_array')
+
+        agent_pos = np.array(self.agent.position)
+        img_obs = np.moveaxis(img.astype(np.float32) / 255, -1, 0)
+
+        obs = {
+            'image': img_obs,
+            'keypoints': kps,
+            'agent_pos': agent_pos
+        }
 
         return obs
     

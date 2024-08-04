@@ -193,7 +193,10 @@ class PushTImageRunner(BaseImageRunner):
                 obs_dict = dict_apply(np_obs_dict, 
                     lambda x: torch.from_numpy(x).to(
                         device=device))
-
+                
+                # print(obs_dict['agent_pos'].shape) # 24,2,2
+                # print(obs_dict['image'].shape) #24,2,3,96,96
+                
                 # run policy
                 with torch.no_grad():
                     action_dict = policy.predict_action(obs_dict)

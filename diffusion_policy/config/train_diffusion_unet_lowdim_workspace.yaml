@@ -1,6 +1,8 @@
 defaults:
   - _self_
-  - task: pusht_lowdim
+  # - task: pusht_lowdim
+  - task: square_lowdim
+
 
 name: train_diffusion_unet_lowdim
 _target_: diffusion_policy.workspace.train_diffusion_unet_lowdim_workspace.TrainDiffusionUnetLowdimWorkspace
@@ -68,14 +70,14 @@ ema:
   max_value: 0.9999
 
 dataloader:
-  batch_size: 256
+  batch_size: 128
   num_workers: 1
   shuffle: True
   pin_memory: True
   persistent_workers: False
 
 val_dataloader:
-  batch_size: 256
+  batch_size: 128
   num_workers: 1
   shuffle: False
   pin_memory: True
@@ -103,7 +105,7 @@ training:
   # in epochs
   rollout_every: 50
   checkpoint_every: 50
-  val_every: 1
+  val_every: 2
   sample_every: 5
   # steps per epoch
   max_train_steps: null

@@ -56,7 +56,7 @@ def test_ood(cfg):
     gmms_latent = unnormalize_data(gmms_latent, latent_stats)
     mus = unnormalize_data(mus, latent_stats)
 
-    test_every = 5
+    test_every = 2
     ood_latent = eval_encoder(test_image_dataset[::test_every], encoder, device)
     grad_arrows = []
     for i in range(0,test_image_dataset.shape[0],test_every):

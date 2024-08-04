@@ -121,6 +121,12 @@ class PushTEnv(gym.Env):
         self._set_state(state)
 
         observation = self._get_obs()
+
+        # setup rec_vec
+        img = self._render_frame(mode='rgb_array')
+        dens, rec_vec = self.rec_policy(self._to_recovery_input(img).to(self.device))
+        self.rec_vec = ((1-dens)*rec_vec).reshape(9,2) * 1
+
         return observation
 
     def step(self, action):
@@ -260,7 +266,7 @@ class PushTEnv(gym.Env):
                 
         
 
-        if self.display_rec:
+        if self.display_rec and mode == 'human':
             kp = self.draw_kp_map['block']
             dens, rec_vec = self.rec_policy(self._to_recovery_input(img).to(self.device))
             self.rec_vec = ((1-dens)*rec_vec).reshape(9,2) * 1
@@ -283,6 +289,9 @@ class PushTEnv(gym.Env):
             pygame.display.update()
 
             # the clock is already ticked during in step for "human"
+
+        if mode == 'rgb_array':
+            img = cv2.resize(img, (96, 96))
 
         return img
 

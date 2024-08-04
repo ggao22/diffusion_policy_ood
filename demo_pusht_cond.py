@@ -123,7 +123,6 @@ def main(output, render_size, control_hz):
             # step env and render
             obs, reward, done, info = env.step(act)
             img = env.render(mode='human')
-            
             # regulate control frequency
             clock.tick(control_hz)
         if not retry:
