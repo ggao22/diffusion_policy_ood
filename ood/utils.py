@@ -33,7 +33,10 @@ def draw_latent(zs, save_path):
     plt.savefig(save_path)
 
 
-def draw_ood_latent(zs, ood_zs, save_path, grad_arrows=np.array(None), mu=np.array(None)):
+
+from matplotlib.patches import Ellipse
+
+def draw_ood_latent(zs, ood_zs, save_path, grad_arrows=np.array(None), MVNs=[]):
     fig = plt.figure(figsize=(18,12))
     fig.tight_layout()
     for o in range(1,7):
@@ -50,10 +53,19 @@ def draw_ood_latent(zs, ood_zs, save_path, grad_arrows=np.array(None), mu=np.arr
             gu = grad_arrows[:,2*(o-1)+18]
             gv = grad_arrows[:,2*(o-1)+1+18]
             ax.quiver(gx, gy, gu, gv, angles='xy', scale_units='xy', scale=5, alpha=0.6)
-        if mu.any():
-            mux = mu[:,2*(o-1)]
-            muy = mu[:,2*(o-1)+1]
-            ax.scatter(mux, muy, color='tab:orange', s=100, alpha=0.6)
+        if MVNs:
+            for mean, cov in zip(MVNs[o-1][0], MVNs[o-1][1]):
+                v, w = np.linalg.eigh(cov)
+                u = w[0] / np.linalg.norm(w[0])
+                angle = np.arctan2(u[1], u[0])
+                angle = 180 * angle / np.pi  # convert to degrees
+                v = 2.0 * np.sqrt(2.0) * np.sqrt(v) 
+                v = v*200
+
+                ell = Ellipse(mean, v[0], v[1], angle=180.0 + angle, color='tab:pink')
+                ell.set_alpha(0.3)
+                ax.add_patch(ell)
+
         ax.set_xlabel('x')
         ax.set_ylabel('y')
         ax.set_title(f"Point {o}")
@@ -165,6 +177,4 @@ def decentralize(traj, pos, ang, screen_size):
     traj = traj + pos
     return traj
 
-    
-    
     

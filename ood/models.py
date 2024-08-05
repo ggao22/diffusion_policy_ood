@@ -85,51 +85,6 @@ from torch import tensor, log, exp, flatten
 from torch.distributions import MultivariateNormal as MVN
 from utils import normalize_data, unnormalize_data, unnormalize_gradient
 
-# class RecoveryPolicy(nn.Module):
-#     def __init__(self, Encoder, GMM_PARAMS, eps=-0.5, tau=0.5, eta=1.0):
-#         super(RecoveryPolicy,self).__init__()
-#         self.Encoder = Encoder
-#         self.GMM_PARAMS = GMM_PARAMS
-
-#         self.eps = eps
-#         self.tau = tau
-#         self.eta = eta
-
-#     def pdfs(self, x):
-#         densities = []
-#         x.retain_grad()
-#         for i in range(len(self.GMM_PARAMS)):
-#             gmm_params = self.GMM_PARAMS[str(i)][()]
-#             MVNs = [MVN(mu, sigma) for (mu, sigma) in zip(tensor(gmm_params["means_"]), tensor(gmm_params["covariances_"]))]
-#             pdf = sum([pi * exp(MVN.log_prob(x[2*i:2*(i+1)])) for (pi, MVN) in zip(tensor(gmm_params['weights_']), MVNs)])
-#             pdf.backward()
-#             pdf = float(pdf.detach().cpu())
-#             densities.append([pdf]*2)
-#         return np.array(densities).flatten()
-
-#     def forward(self,obs):
-#         with torch.no_grad():
-#             z = self.Encoder(obs)
-#             z =flatten(z).cpu().numpy()
-
-#         z = tensor(z, requires_grad=True)
-#         densities = self.pdfs(z) * 100
-#         # print()
-#         # print(f'densities: {densities}')
-
-#         density_norm = 1/(1+np.exp(-(densities+self.eps)/self.tau)) # parameterized sigmoid
-#         # print(f'density_norm: {density_norm}')
-
-#         grad = z.grad.detach().cpu().numpy()
-#         negexp_grad = np.copy(grad)
-#         for i in range(len(self.GMM_PARAMS)):
-#             grad_kp = grad[2*i:2*(i+1)]
-#             grad_kp_norm = grad_kp/np.linalg.norm(grad_kp)
-#             mag = np.exp((-np.linalg.norm(grad_kp)+90)/20)
-#             negexp_grad[2*i:2*(i+1)] = grad_kp_norm*mag
-
-#         return density_norm, self.eta * negexp_grad
-    
 
 class RecoveryPolicy(nn.Module):
     def __init__(self, Encoder, GMM_PARAMS, latent_stats, eps=-0.5, tau=0.5, eta=1.0):
@@ -181,3 +136,17 @@ class RecoveryPolicy(nn.Module):
         return densities_norm, negexp_grad
 
 
+
+# class Decoder(nn.Module):
+#     def __init__(self, in_dim=18):
+#         super(Decoder,self).__init__()
+#         self.in_dim = in_dim
+#         self.layer = nn.Linear(self.in_dim, self.in_dim)
+
+#     def forward(self,x):
+#         x = self.layer(x)
+#         return x
+
+#     def loss(self, pred, true):
+#         loss = F.mse_loss(pred, true, reduction='sum')
+#         return loss

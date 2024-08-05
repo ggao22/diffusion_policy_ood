@@ -16,13 +16,17 @@ import torch
 import dill
 import wandb
 import json
+import zarr
 from torch.utils.data import DataLoader
+from torchvision import transforms
+
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from diffusion_policy.dataset.base_dataset import BaseLowdimDataset
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.env.pusht.pusht_keypoints_image_env import PushTKeypointsImageEnv
 
-from ood.utils import get_center_pos, get_center_ang, centralize, centralize_grad, decentralize
+from ood.utils import get_center_pos, get_center_ang, centralize, centralize_grad, decentralize, unnormalize_data, normalize_data, get_data_stats
+from ood.models import EquivalenceMap
 
 import pygame
 import matplotlib.pyplot as plt
@@ -92,6 +96,16 @@ def main(output_dir, device, screen_size):
     # load base policy from checkpoint
     base_policy, base_cfg = load_policy(rec_cfg['base_ckpt'], device, output_dir)
 
+    stats = np.load(os.path.join(rec_cfg['testing_dir'], "stats.npz"), allow_pickle=True)
+    latent_stats = stats['latent_stats'][()]
+    kp_dataset = np.array(zarr.open(rec_cfg['datapath'],'r')['data']['keypoint']).reshape(-1,18)
+    kp_stats = get_data_stats(kp_dataset)
+    encoder = EquivalenceMap(input_size=rec_cfg["input_size"], output_size=rec_cfg["action_dim"])
+    encoder_ckpt = torch.load(os.path.join(rec_cfg['testing_dir'], "encoder.pt"))
+    encoder.load_state_dict(encoder_ckpt['model_state_dict'])
+    preprocess = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
+
+
     pltscreen = (np.ones((screen_size,screen_size,3)) * 255).astype(int)
     fig, ax = plt.subplots()
 
@@ -114,12 +128,13 @@ def main(output_dir, device, screen_size):
 
     states = []
     env_imgs = []
-    max_iter = 20
+    max_iter = 100
     episodes = 1
     ood_threshold = 40
 
     for n in range(episodes):
-        seed = n+350
+        # seed = n+350
+        seed = n+380
         env.seed(seed)
         obs = env.reset()
         while not condition(obs['keypoints'], 512, 'right'):
@@ -138,11 +153,25 @@ def main(output_dir, device, screen_size):
 
         # env policy control
         for iter in range(max_iter):
-            print(np.linalg.norm(info['rec_vec'].mean(axis=0)))
+            # print(np.linalg.norm(info['rec_vec'].mean(axis=0)))
+
+            latent = encoder(preprocess(np.moveaxis(obs['image'],0,2)).unsqueeze(0)).squeeze(0).detach().cpu().numpy()
+            latent = normalize_data(latent, latent_stats)
+            pseudo_kp = unnormalize_data(latent, kp_stats)
+
+            center_pos = get_center_pos(pseudo_kp.reshape(9,2))
+            true_center_pos = get_center_pos(obs['keypoints'][:18].reshape(9,2))
+            print(center_pos)
+            print(true_center_pos)
+
+            center_ang = get_center_ang(pseudo_kp.reshape(9,2))
+            true_center_ang = get_center_ang(obs['keypoints'][:18].reshape(9,2))
+            print(center_ang)
+            print(true_center_ang)
+
             if np.linalg.norm(info['rec_vec'].mean(axis=0)) < ood_threshold and iter>0:
                 # case: In-Distribution
                 past_obs = add_obs(obs, past_obs, n_obs_steps)
-
 
                 # device transfer
                 obs_dict = dict_apply(past_obs, 
@@ -162,14 +191,29 @@ def main(output_dir, device, screen_size):
                 
             else:
                 # case: Out-Of-Distribution
-                kp = obs['keypoints'][:18].reshape(9,2)
+                latent = encoder(preprocess(np.moveaxis(obs['image'],0,2)).unsqueeze(0)).squeeze(0).detach().cpu().numpy()
+                latent = normalize_data(latent, latent_stats)
+                pseudo_kp = unnormalize_data(latent, kp_stats)
+
+                # kp = obs['keypoints'][:18].reshape(9,2)
+                kp = pseudo_kp.reshape(9,2)
                 rec_vec = info['rec_vec']
 
                 center_pos = get_center_pos(kp)
                 center_ang = get_center_ang(kp)
-                kp_start = centralize(kp, center_pos, center_ang, screen_size) #9,2
+                kp_start = np.array([[264.05470922, 305.95380222],
+                            [195.91772399, 213.134809  ],
+                            [317.78647403, 215.73112323],
+                            [256.,         241.25413635],
+                            [239.97253574, 338.18345584],
+                            [295.09468435, 249.46903473],
+                            [216.14934828, 247.52549507],
+                            [238.59240633, 278.18318234],
+                            [280.43211806, 214.56496122]])
+
+                # kp_start = centralize(kp, center_pos, center_ang, screen_size) #9,2
                 rec_vec = centralize_grad(rec_vec, center_ang) #9,2
-                kp_traj = generate_kp_traj(kp_start, rec_vec, horizon=16, delay=10, alpha=1.0)
+                kp_traj = generate_kp_traj(kp_start, rec_vec, horizon=16, delay=10, alpha=2.0)
 
                 init_action = centralize(np.expand_dims(info['pos_agent'],0), center_pos, center_ang, screen_size)
 

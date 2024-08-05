@@ -5,11 +5,12 @@ import zarr
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+from torchvision import transforms
 from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 
 
-from dataset import ObsActPairs, ObsPosPairs
+from dataset import ObsActPairs, ObsPosPairs, ObsActPosPairs
 from models import EquivalenceMap
 from utils import get_data_stats, normalize_data
 from sklearn.mixture import GaussianMixture
@@ -20,7 +21,7 @@ from utils import draw_latent, eval_encoder
 def train_recovery_policy(cfg):
     # config
     now = datetime.now()
-    outpath = os.path.join(cfg["output_dir"], cfg["dataname"]+"_"+now.strftime("%m-%d-%Y_%H$%M"))
+    outpath = os.path.join(cfg["output_dir"], cfg["dataname"]+"/"+now.strftime("%m-%d-%Y_%H$%M"))
     os.makedirs(outpath, exist_ok=False)
 
     # data
@@ -28,6 +29,15 @@ def train_recovery_policy(cfg):
         encoder_dataset = ObsActPairs(datapath=cfg["datapath"])
     elif cfg['loss_type'] == 'position':
         encoder_dataset = ObsPosPairs(datapath=cfg["datapath"])
+    elif cfg['loss_type'] == 'action, position':
+        preprocess = transforms.Compose([transforms.ToPILImage(),
+                                        transforms.ToTensor(),
+                                        # transforms.RandomRotation(degrees=(0,180)),
+                                        transforms.RandomResizedCrop(size=(96, 96), scale=(0.6,0.6), ratio=(1,1), antialias=True),
+                                        ])
+        encoder_dataset = ObsActPosPairs(datapath=cfg["datapath"], 
+                                         preprocess=preprocess
+                                                    )
     else:
         raise Exception('Not Implemented')
     
@@ -51,7 +61,6 @@ def train_recovery_policy(cfg):
 
     if torch.cuda.is_available():
         encoder.cuda()
-        # gmm.cuda()
         device = 'cuda'
     else:
         device = 'cpu'
@@ -86,8 +95,18 @@ def train_recovery_policy(cfg):
                             s, position = s.to(device), position.to(device)
                             z = encoder(s)
                             loss = encoder.position_loss(z, position)
+                        elif cfg['loss_type'] == 'action, position':
+                            s, s_prime, pos, pos_prime, action = batch
+                            s, s_prime, pos, pos_prime, action = s.to(device), s_prime.to(device), pos.to(device), pos_prime.to(device), action.to(device)
+                            z, z_prime = encoder(s), encoder(s_prime)
+                            action_loss = encoder.action_loss(z, z_prime, action)
+                            position_loss = encoder.position_loss(z, pos) + encoder.position_loss(z_prime, pos_prime)
+                            loss = action_loss + position_loss
                         else:
                             raise Exception('Not Implemented')
+                        
+                        # plt.imshow(np.moveaxis(s.detach().cpu().numpy()[0], 0, 2))
+                        # plt.show()
                         
                         loss.backward()
                         encoder_optim.step()
@@ -99,6 +118,10 @@ def train_recovery_policy(cfg):
                 tglobal.set_postfix(loss=np.mean(epoch_loss))
                 if epoch_idx%cfg['test_every'] == 0:
                     test_latent = eval_encoder(test_image_dataset, encoder, device)
+                    # save encoder
+                    torch.save({
+                        'model_state_dict'              : encoder.state_dict(),
+                        }, os.path.join(outpath, "encoder.pt"))
                     draw_latent(test_latent, os.path.join(outpath, "test_latent.png"))
                 if np.mean(epoch_loss) < cfg['encoder_loss_stop_threshold']:
                     print('Reached Loss Stop Threshold. Stopping Early.')
@@ -107,6 +130,7 @@ def train_recovery_policy(cfg):
         torch.save({
             'model_state_dict'              : encoder.state_dict(),
             }, os.path.join(outpath, "encoder.pt"))
+
 
     # latent data for gmm
     full_latent_data = eval_encoder(image_dataset, encoder, device).cpu().numpy()

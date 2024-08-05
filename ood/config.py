@@ -1,10 +1,10 @@
 # stores config for trainer, tester, and visualization files
 cfg = {
         # main cfgs
-        'loss_type': 'action',
+        'loss_type': 'action, position',
         "output_dir": "output",
         "input_size": (96,96),
-        "dataname": "pusht_demo_left_v2",
+        "dataname": "pusht_demo_left_kp",
         "action_dim": 18,
         "space_dim": 2,
 
@@ -12,18 +12,17 @@ cfg = {
         "batch_size": 64,
 
         "num_test_traj": 2,
-        "n_components": 2,
+        "n_components": 4,
         
-        "load_encoder": True,
+        "load_encoder": False,
         "encoder_max_epoch": 1000,
-        "encoder_loss_stop_threshold": 1.0e+3,
+        "encoder_loss_stop_threshold": 3e+4,
         "encoder_lr": 1e-3,
         "test_every": 100,
 
         # testing cfgs
         'ood_datapath': '/home/georgegao/diffusion_policy_ood/data/pusht_demo_right_test.zarr',
         'testing_dir': '/home/georgegao/diffusion_policy_ood/ood/output/pusht_demo_left_07-23-2024_15$21',
-        # 'testing_dir': '/home/georgegao/diffusion_policy_ood/ood/output/pusht_demo_left_v2_07-31-2024_11$46',
 
         # rec cfg
         "eps": -40,
