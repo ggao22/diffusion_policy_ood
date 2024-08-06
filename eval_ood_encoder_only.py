@@ -26,7 +26,7 @@ from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.env.pusht.pusht_keypoints_image_env import PushTKeypointsImageEnv
 
 from ood.utils import get_center_pos, get_center_ang, centralize, centralize_grad, decentralize, unnormalize_data, normalize_data, get_data_stats
-from ood.models import EquivalenceMap
+from ood.models import EquivariantMap
 
 import pygame
 import matplotlib.pyplot as plt
@@ -100,7 +100,7 @@ def main(output_dir, device, screen_size):
     latent_stats = stats['latent_stats'][()]
     kp_dataset = np.array(zarr.open(rec_cfg['datapath'],'r')['data']['keypoint']).reshape(-1,18)
     kp_stats = get_data_stats(kp_dataset)
-    encoder = EquivalenceMap(input_size=rec_cfg["input_size"], output_size=rec_cfg["action_dim"])
+    encoder = EquivariantMap(input_size=rec_cfg["input_size"], output_size=rec_cfg["action_dim"])
     encoder_ckpt = torch.load(os.path.join(rec_cfg['testing_dir'], "encoder.pt"))
     encoder.load_state_dict(encoder_ckpt['model_state_dict'])
     preprocess = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])

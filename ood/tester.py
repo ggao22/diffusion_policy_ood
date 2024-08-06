@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torchvision import transforms
 
-from models import EquivalenceMap, RecoveryPolicy
+from models import EquivariantMap, RecoveryPolicy
 from sklearn.mixture import GaussianMixture
 from utils import draw_ood_latent, eval_encoder, unnormalize_data, normalize_data, get_data_stats
 
@@ -24,7 +24,7 @@ def test_ood(cfg):
     #                                     # transforms.RandomRotation(degrees=(0,180)),
     #                                     transforms.RandomResizedCrop(size=(96, 96), scale=(0.6,0.6), ratio=(1,1), antialias=True),
     #                                     ])
-    encoder = EquivalenceMap(input_size=cfg["input_size"], output_size=cfg["action_dim"])
+    encoder = EquivariantMap(input_size=cfg["input_size"], output_size=cfg["action_dim"])
     gmms = []
     for i in range(cfg["action_dim"]//cfg["space_dim"]):
         gmms.append(GaussianMixture(n_components=cfg["n_components"]))

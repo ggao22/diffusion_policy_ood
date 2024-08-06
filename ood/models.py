@@ -6,9 +6,9 @@ import numpy as np
 from math import pi
 
 
-class EquivalenceMap(nn.Module):
+class EquivariantMap(nn.Module):
     def __init__(self, input_size=(180,256), input_ch=3, output_size=3):
-        super(EquivalenceMap,self).__init__()
+        super(EquivariantMap,self).__init__()
         self.input_size = input_size
         self.input_ch = input_ch
         self.output_size = output_size

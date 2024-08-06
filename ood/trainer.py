@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 
 from dataset import ObsActPairs, ObsPosPairs, ObsActPosPairs
-from models import EquivalenceMap
+from models import EquivariantMap
 from utils import get_data_stats, normalize_data
 from sklearn.mixture import GaussianMixture
 from utils import draw_latent, eval_encoder
@@ -52,7 +52,7 @@ def train_recovery_policy(cfg):
     test_image_dataset = image_dataset[:end_indices[cfg['num_test_traj']-1]]
 
     # model
-    encoder = EquivalenceMap(input_size=cfg["input_size"], output_size=cfg["action_dim"])
+    encoder = EquivariantMap(input_size=cfg["input_size"], output_size=cfg["action_dim"])
     # gmm = GmmFull(num_components=cfg["n_components"], num_dims=cfg["action_dim"])
 
     gmms = []
