@@ -100,7 +100,9 @@ def test():
     import robomimic.utils.env_utils as EnvUtils
     from matplotlib import pyplot as plt
 
-    dataset_path = '/home/cchi/dev/diffusion_policy/data/robomimic/datasets/square/ph/low_dim.hdf5'
+    # dataset_path = '/home/cchi/dev/diffusion_policy/data/robomimic/datasets/square/ph/low_dim.hdf5'
+    dataset_path = '/home/georgegao/diffusion_policy_ood/data/robomimic/datasets/square/ph/low_dim.hdf5'
+
     env_meta = FileUtils.get_env_metadata_from_dataset(
         dataset_path)
 

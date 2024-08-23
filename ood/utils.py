@@ -4,15 +4,38 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from torchvision import transforms
+import zarr
 
+
+def kp_to_objaction(datapath):
+    dataset = zarr.open(datapath,'r')
+    kps = np.array(dataset['data']['keypoint'])
+    ends = np.array([0]+list(dataset['meta']['episode_ends']))
+
+    kpvs = []
+    for i in range(len(ends)-1):
+        kp = kps[ends[i]:ends[i+1]] 
+        kp = kp.reshape(kp.shape[0],-1)
+        kpv = np.diff(kp, axis=0)
+        v0 = np.zeros((1,kpv.shape[1]))
+        kpvs.append(np.vstack((v0, kpv)))
+
+    kpvs = np.vstack((kpvs))
+    return kpvs
     
 # evaluating
-def eval_encoder(imgs, encoder, device):
+def eval_encoder(imgs, encoder, device, decoder=None, stats=None):
     with torch.no_grad():
         preprocess = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor()])
         latent_data = []
         for i in range(len(imgs)):
-            latent_data.append(encoder(preprocess(imgs[i]).unsqueeze(0).to(device)).detach().cpu().numpy())
+            out = encoder(preprocess(imgs[i]).unsqueeze(0).to(device))
+            if decoder:
+                out = out.cpu().numpy()
+                out = normalize_data(out, stats["latent_stats"])
+                out = unnormalize_data(out, stats["kp_stats"])
+                out = decoder(torch.from_numpy(out).to(device))
+            latent_data.append(out.detach().cpu().numpy())
         latent_data = torch.from_numpy(np.vstack((latent_data)))
         return latent_data
 
@@ -108,26 +131,25 @@ def get_center_ang(kp):
     center_ang = np.arctan2(centered_pt[1],centered_pt[0])
     return center_ang
 
-def centralize(traj, pos, ang, screen_size):
+def centralize(traj, pos, ang=None, screen_size=512):
     assert traj.shape[-1] == 2
-
     # center pos
     traj = traj - pos
-
     # center angle
-    correction_ang = -ang - np.pi/2
-    rot_mat = np.array([
-        [np.cos(correction_ang),-np.sin(correction_ang)],
-        [np.sin(correction_ang),np.cos(correction_ang)]
-    ])
-    for i in range(len(traj)):
-        pts = traj[i]
-        if len(pts.shape)==2:
-            pts = np.swapaxes(pts,0,1)
-            pts = rot_mat @ pts
-            traj[i] = np.swapaxes(pts,0,1)
-        else:
-            traj[i] = rot_mat @ pts
+    if ang:
+        correction_ang = -ang - np.pi/2
+        rot_mat = np.array([
+            [np.cos(correction_ang),-np.sin(correction_ang)],
+            [np.sin(correction_ang),np.cos(correction_ang)]
+        ])
+        for i in range(len(traj)):
+            pts = traj[i]
+            if len(pts.shape)==2:
+                pts = np.swapaxes(pts,0,1)
+                pts = rot_mat @ pts
+                traj[i] = np.swapaxes(pts,0,1)
+            else:
+                traj[i] = rot_mat @ pts
             
     traj = traj + np.array([screen_size//2, screen_size//2])
     return traj
@@ -154,24 +176,25 @@ def centralize_grad(traj, ang):
 
 
 
-def decentralize(traj, pos, ang, screen_size):
+def decentralize(traj, pos, ang=None, screen_size=512):
     # inverse of centralize #
     traj = traj - np.array([screen_size//2, screen_size//2])
 
     # decenter angle
-    correction_ang = -(-ang - np.pi/2)
-    rot_mat = np.array([
-        [np.cos(correction_ang),-np.sin(correction_ang)],
-        [np.sin(correction_ang),np.cos(correction_ang)]
-    ])
-    for i in range(len(traj)):
-        pts = traj[i]
-        if len(pts.shape)==2:
-            pts = np.swapaxes(pts,0,1)
-            pts = rot_mat @ pts
-            traj[i] = np.swapaxes(pts,0,1)
-        else:
-            traj[i] = rot_mat @ pts
+    if ang:
+        correction_ang = -(-ang - np.pi/2)
+        rot_mat = np.array([
+            [np.cos(correction_ang),-np.sin(correction_ang)],
+            [np.sin(correction_ang),np.cos(correction_ang)]
+        ])
+        for i in range(len(traj)):
+            pts = traj[i]
+            if len(pts.shape)==2:
+                pts = np.swapaxes(pts,0,1)
+                pts = rot_mat @ pts
+                traj[i] = np.swapaxes(pts,0,1)
+            else:
+                traj[i] = rot_mat @ pts
     
     # decenter pos
     traj = traj + pos

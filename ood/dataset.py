@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 import zarr
 import numpy as np
 
-from kp_to_objaction import kp_to_objaction
+from utils import kp_to_objaction
 
 
 class ObsActPosPairs(Dataset):
@@ -39,6 +39,30 @@ class ObsActPosPairs(Dataset):
     def __len__(self):
         return len(self.image_dataset)
 
+
+class ObsActPairsV2(Dataset):
+    def __init__(self, datapath=None,
+                 preprocess=transforms.Compose([transforms.ToPILImage(),
+                                                    transforms.ToTensor()])):
+        super().__init__()
+        assert(datapath is not None)
+        data = zarr.open(datapath,'r')
+        self.image_dataset = np.array(data['data']['img'])[:,:,:,[2,1,0]]
+        self.position_dataset = np.array(data['data']['keypoint'])
+        self.transforms = preprocess
+
+    def __getitem__(self, index):
+        rand_idx = np.random.randint(0, len(self.image_dataset))
+        q1 = self.transforms(self.image_dataset[index])
+        q2 = self.transforms(self.image_dataset[rand_idx])
+        kp1 = self.position_dataset[index]
+        kp2 = self.position_dataset[rand_idx]
+        obj_action = (kp2-kp1).flatten()
+        return q1, q2, obj_action
+
+    def __len__(self):
+        return len(self.image_dataset)
+    
 
 
 class ObsActPairs(Dataset):

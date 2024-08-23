@@ -46,10 +46,8 @@ def test_ood(cfg):
 
     stats = np.load(os.path.join(cfg['testing_dir'], "stats.npz"), allow_pickle=True)
     latent_stats = stats['latent_stats'][()]
-
-    kp_stats = get_data_stats(kp_dataset)
-    # action_space_stats = {'min': np.zeros_like(latent_stats['min']),
-    #                       'max': np.ones_like(latent_stats['max']) * 512}
+    kp_stats = stats['kp_stats'][()]
+    # kp_stats = get_data_stats(kp_dataset)
 
     rec_policy = RecoveryPolicy(encoder, gmms_params, latent_stats, eps=cfg['eps'], tau=cfg['tau'], eta=cfg['eta'])
 

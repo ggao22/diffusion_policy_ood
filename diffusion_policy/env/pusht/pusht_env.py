@@ -16,7 +16,7 @@ from diffusion_policy.env.pusht.pymunk_override import DrawOptions
 
 import torch
 from torchvision import transforms
-from ood.models import EquivalenceMap, RecoveryPolicy
+from ood.models import EquivariantMap, RecoveryPolicy
 import matplotlib.pyplot as plt
 
 
@@ -175,7 +175,7 @@ class PushTEnv(gym.Env):
         return TeleopAgent(act)
     
     def _setup_rec_policy(self, cfg):
-        encoder = EquivalenceMap(input_size=cfg["input_size"], output_size=cfg["action_dim"])
+        encoder = EquivariantMap(input_size=cfg["input_size"], output_size=cfg["action_dim"])
 
         if torch.cuda.is_available():
             encoder.cuda()

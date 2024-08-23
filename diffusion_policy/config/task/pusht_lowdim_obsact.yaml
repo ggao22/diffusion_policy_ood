@@ -27,7 +27,7 @@ env_runner:
 dataset:
   _target_: diffusion_policy.dataset.pusht_dataset_obsact.PushTLowdimObsactDataset
   # zarr_path: data/pusht/pusht_cchi_v7_replay.zarr
-  zarr_path: data/pusht_demo_left_v2.zarr
+  zarr_path: data/pusht_demo_left_img.zarr
   horizon: ${horizon}
   pad_before: 0
   pad_after: 0

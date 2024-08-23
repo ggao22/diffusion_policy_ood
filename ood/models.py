@@ -1,9 +1,68 @@
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torchvision.models import resnet18, ResNet18_Weights
 import numpy as np
 
 from math import pi
+import matplotlib.pyplot as plt
+
+
+# class EquivariantMap(nn.Module):
+#     def __init__(self, input_size=(180,256), input_ch=3, output_size=3):
+#         super(EquivariantMap,self).__init__()
+#         self.input_size = input_size
+#         self.input_ch = input_ch
+#         self.output_size = output_size
+#         self.activation = {}
+
+#         self.featureExtractor = resnet18(ResNet18_Weights.DEFAULT)
+#         # self.featureExtractor.fc = nn.Identity()
+#         self.featureExtractor.eval()
+#         # self.featureExtractor.layer2.register_forward_hook(self._get_activation('layer2'))
+
+#         #encoder
+#         self.c1 = nn.Conv2d(input_ch,64,kernel_size=4,padding=1,stride=2)
+#         self.c2 = nn.Conv2d(64,64,kernel_size=4,padding=1,stride=2)
+#         # self.c3 = nn.Conv2d(64,64,kernel_size=4,padding=1,stride=2)
+#         # self.c4 = nn.Conv2d(64,64,kernel_size=4,padding=1,stride=2)
+#         self.c5 = nn.Conv2d(64,8,kernel_size=4,padding=1,stride=2)
+#         self.fc1 = nn.Linear(np.prod([8,3,3]), 64)
+#         self.fc2 = nn.Linear(64, 64)
+#         self.fc3 = nn.Linear(64,self.output_size)
+
+
+#     def _get_activation(self, name):
+#         def hook(model, input, output):
+#             self.activation[name] = output.detach()
+#         return hook
+    
+#     def forward(self,input):
+#         out = self.featureExtractor(input)
+#         # print(self.activation['layer2'].shape)
+#         # plt.imshow(np.moveaxis(self.activation['layer2'].detach().cpu().numpy()[0,:,:,:3],0,0))
+#         # plt.show()
+
+#         input = input.view(-1,self.input_ch,self.input_size[0],self.input_size[1])
+#         x = F.relu(self.c1(input))
+#         x = F.relu(self.c2(x))
+#         # x = F.relu(self.c3(x))
+#         # x = F.relu(self.c4(x))
+#         x = F.relu(self.c5(x))
+
+#         # print(x.shape)
+#         x = x.view([x.size()[0], -1])
+#         x = F.relu(self.fc1(x))
+#         x = F.relu(self.fc2(x))
+#         x = self.fc3(x)
+#         return x
+
+#     def action_loss(self, z, z_prime, action):
+#         return torch.sum(torch.norm(z_prime - z - action, dim=1)**2)
+
+#     def position_loss(self, z, pos):
+#         return torch.sum(torch.norm(z - pos, dim=1)**2)
+    
 
 
 class EquivariantMap(nn.Module):
@@ -12,23 +71,33 @@ class EquivariantMap(nn.Module):
         self.input_size = input_size
         self.input_ch = input_ch
         self.output_size = output_size
+        self.activation = {}
+        
+        self.featureExtractor = resnet18(ResNet18_Weights.DEFAULT)
+        self.featureExtractor.eval()
+        self.featureExtractor.layer4.register_forward_hook(self._get_activation('layer4'))
 
         #encoder
-        self.c1 = nn.Conv2d(input_ch,64,kernel_size=4,padding=1,stride=2)
-        self.c2 = nn.Conv2d(64,64,kernel_size=4,padding=1,stride=2)
-        self.c3 = nn.Conv2d(64,64,kernel_size=4,padding=1,stride=2)
-        self.c4 = nn.Conv2d(64,64,kernel_size=4,padding=1,stride=2)
-        self.c5 = nn.Conv2d(64,8,kernel_size=4,padding=1,stride=2)
-        self.fc1 = nn.Linear(np.prod([8,3,3]), 64)
-        self.fc2 = nn.Linear(64, 64)
-        self.fc3 = nn.Linear(64,self.output_size)
+        self.c1 = nn.Conv2d(512,64,kernel_size=3,padding=1,stride=2)
+        self.c2 = nn.Conv2d(64,64,kernel_size=3,padding=1,stride=2)
+        self.c5 = nn.Conv2d(64,8,kernel_size=3,padding=1,stride=2)
+        self.fc1 = nn.Linear(np.prod([8,1,1]), 32)
+        self.fc2 = nn.Linear(32, 32)
+        self.fc3 = nn.Linear(32,self.output_size)
 
+
+    def _get_activation(self, name):
+        def hook(model, input, output):
+            self.activation[name] = output.detach()
+        return hook
+    
     def forward(self,input):
-        input = input.view(-1,self.input_ch,self.input_size[0],self.input_size[1])
+        _ = self.featureExtractor(input)
+        input = self.activation['layer4']
+        # print(self.activation['layer4'].shape)
+
         x = F.relu(self.c1(input))
         x = F.relu(self.c2(x))
-        x = F.relu(self.c3(x))
-        x = F.relu(self.c4(x))
         x = F.relu(self.c5(x))
 
         # print(x.shape)
@@ -43,6 +112,8 @@ class EquivariantMap(nn.Module):
 
     def position_loss(self, z, pos):
         return torch.sum(torch.norm(z - pos, dim=1)**2)
+
+
 
 
 def calculate_matmul_n_times(n_components, mat_a, mat_b):
@@ -137,16 +208,16 @@ class RecoveryPolicy(nn.Module):
 
 
 
-# class Decoder(nn.Module):
-#     def __init__(self, in_dim=18):
-#         super(Decoder,self).__init__()
-#         self.in_dim = in_dim
-#         self.layer = nn.Linear(self.in_dim, self.in_dim)
+class Decoder(nn.Module):
+    def __init__(self, in_dim=18):
+        super(Decoder,self).__init__()
+        self.in_dim = in_dim
+        self.layer = nn.Linear(self.in_dim, self.in_dim)
 
-#     def forward(self,x):
-#         x = self.layer(x)
-#         return x
+    def forward(self,x):
+        x = self.layer(x)
+        return x
 
-#     def loss(self, pred, true):
-#         loss = F.mse_loss(pred, true, reduction='sum')
-#         return loss
+    def loss(self, pred, true):
+        loss = F.mse_loss(pred, true, reduction='sum')
+        return loss

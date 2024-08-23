@@ -105,9 +105,8 @@ class PushTLowdimObsactDataset(BaseLowdimDataset):
         act = data['action']
 
         center_pos = get_center_pos(obs[0])
-        center_ang = get_center_ang(obs[0])
-        centered_obs = centralize(obs, center_pos, center_ang, screen_size=canvas_size)
-        centered_act = centralize(act, center_pos, center_ang, screen_size=canvas_size)
+        centered_obs = centralize(obs, center_pos, screen_size=canvas_size)
+        centered_act = centralize(act, center_pos, screen_size=canvas_size)
 
         data['obs'] = centered_obs.reshape(-1,18)
         data['action'] = centered_act
