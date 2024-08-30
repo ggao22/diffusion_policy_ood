@@ -123,7 +123,7 @@ class SequenceSampler:
             = self.indices[idx]
         result = dict()
         for key in self.keys:
-            input_arr = self.replay_buffer[key]
+            input_arr = np.copy(self.replay_buffer[key])
             # performance optimization, avoid small allocation if possible
             if key not in self.key_first_k:
                 sample = input_arr[buffer_start_idx:buffer_end_idx]
