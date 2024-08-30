@@ -22,7 +22,7 @@ import shutil
 
 from diffusion_policy.common.pytorch_util import dict_apply, optimizer_to
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
-from diffusion_policy.policy.diffusion_unet_lowdim_policy import DiffusionUnetLowdimPolicy
+from diffusion_policy.policy.diffusion_unet_lowdim_obsact_policy import DiffusionUnetLowdimObsactPolicy
 from diffusion_policy.dataset.base_dataset import BaseLowdimDataset
 from diffusion_policy.env_runner.base_lowdim_runner import BaseLowdimRunner
 from diffusion_policy.common.checkpoint_util import TopKCheckpointManager
@@ -46,10 +46,10 @@ class TrainDiffusionUnetLowdimObsactWorkspace(BaseWorkspace):
         random.seed(seed)
 
         # configure model
-        self.model: DiffusionUnetLowdimPolicy
+        self.model: DiffusionUnetLowdimObsactPolicy
         self.model = hydra.utils.instantiate(cfg.policy)
 
-        self.ema_model: DiffusionUnetLowdimPolicy = None
+        self.ema_model: DiffusionUnetLowdimObsactPolicy = None
         if cfg.training.use_ema:
             self.ema_model = copy.deepcopy(self.model)
 

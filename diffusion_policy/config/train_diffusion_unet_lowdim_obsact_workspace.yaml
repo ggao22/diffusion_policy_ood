@@ -1,6 +1,8 @@
 defaults:
   - _self_
-  - task: pusht_lowdim_obsact
+  # - task: pusht_lowdim_obsact
+  - task: square_lowdim_abs_obsact
+  
 
 name: train_diffusion_unet_lowdim_obsact
 _target_: diffusion_policy.workspace.train_diffusion_unet_lowdim_obsact_workspace.TrainDiffusionUnetLowdimObsactWorkspace
