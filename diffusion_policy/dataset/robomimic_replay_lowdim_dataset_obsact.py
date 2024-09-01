@@ -124,13 +124,13 @@ class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         data = self.sampler.sample_sequence(idx)
 
-        batch_obj_pose = to_obj_pose(data['obs']) # N,4,4
-        batch_kp = gen_keypoints(batch_obj_pose) # N,n_kp,D_kp
-        batch_abs_kp = abs_traj(batch_kp, batch_obj_pose[0])
-        data['obs'] = batch_abs_kp.reshape(-1,9)
-        # data['obs'] = batch_kp.reshape(-1,9)
+        obj_pose = to_obj_pose(data['obs']) # H,4,4
+        kp = gen_keypoints(obj_pose) # H,n_kp,D_kp
+        abs_kp = abs_traj(kp, obj_pose[0])
+        data['obs'] = abs_kp.reshape(-1,9)
+        # data['obs'] = kp.reshape(-1,9)
         
-        # data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], batch_obj_pose[0])
+        data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], obj_pose[0])
 
         torch_data = dict_apply(data, torch.from_numpy)
         return torch_data

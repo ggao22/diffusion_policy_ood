@@ -59,27 +59,47 @@ def draw_ood_latent(zs, ood_zs, save_path, grad_arrows=np.array(None), MVNs=[]):
 # centering kp, assuming pose are available
 def abs_traj(traj, pose_0):
     assert traj.shape[-1] == 3
-    assert len(traj.shape) == 3
 
-    R = scipy.spatial.transform.Rotation
-    r = R.from_matrix(pose_0[:3,:3])
-    r = r.inv()
-    inv_rot = r.as_matrix()
-    inv_pos = -pose_0[:3,3]
+    ### METHOD 1 ###
+    # R = scipy.spatial.transform.Rotation
+    # r = R.from_matrix(pose_0[:3,:3])
+    # r = r.inv()
+    # inv_rot = r.as_matrix()
+    # inv_pos = -pose_0[:3,3]
 
-    for i in range(traj.shape[0]):
-        kps = traj[i] #n_kp,D_kp
+    # for i in range(traj.shape[0]):
+    #     kps = traj[i] #n_kp,D_kp
+    #     traj[i] = (inv_rot @ (kps + inv_pos).T).T
 
-        # # switch into homogenous coordinates
-        # homo_coord = np.ones((kps.shape[0],1))
-        # kps_homo = np.hstack((kps,homo_coord)) #n_kp,D_kp+1
+    ### METHOD 2 ###
+    org_shape = traj.shape
+    traj = traj.reshape(-1,3) #n_kp,D_kp
 
-        # centering traj on first pose
-        # transformed_kps_homo = np.linalg.solve(pose_0, kps_homo.T)
-        # traj[i] = transformed_kps_homo.T[:,:3] #n_kp,D_kp
+    # switch into homogenous coordinates
+    homo_coord = np.ones((traj.shape[0],1))
+    traj_homo = np.hstack((traj,homo_coord)) #n_kp,D_kp+1
 
-        traj[i] = (inv_rot @ (kps + inv_pos).T).T
+    # centering traj on first pose
+    transformed_kps_homo = np.linalg.solve(pose_0, traj_homo.T).T #n_kp,D_kp+1
+    traj = transformed_kps_homo[:,:3] #n_kp,D_kp
+    traj = traj.reshape(org_shape)
 
+    return traj
+
+
+def deabs_traj(traj, pose_0):
+    assert traj.shape[-1] == 3
+    org_shape = traj.shape
+    traj = traj.reshape(-1,3) #n_kp,D_kp
+
+    # switch into homogenous coordinates
+    homo_coord = np.ones((traj.shape[0],1))
+    traj_homo = np.hstack((traj,homo_coord)) #n_kp,D_kp+1
+
+    # decentering traj on first pose
+    transformed_kps_homo = (pose_0 @ traj_homo.T).T #n_kp,D_kp+1
+    traj = transformed_kps_homo[:,:3] #n_kp,D_kp
+    traj = traj.reshape(org_shape)
     return traj
 
 
@@ -89,7 +109,6 @@ def abs_se3_vector(se3_vector, pose_0):
     
     org_shape = se3_vector.shape
     se3_vector = se3_vector.reshape(-1,org_shape[-1])
-    pose_0_inv = np.linalg.inv(pose_0)
 
     # switch full pose matrix
     rotation_transformer = RotationTransformer(from_rep='rotation_6d', to_rep='matrix')
@@ -103,7 +122,37 @@ def abs_se3_vector(se3_vector, pose_0):
     full_pose = np.concatenate((partial_pose, np.repeat([[[0,0,0,1]]],partial_pose.shape[0],0)),1) # N,4,4
     
     # centering traj on first pose
-    transformed_full_pose = pose_0_inv @ full_pose
+    transformed_full_pose = np.linalg.solve(pose_0, full_pose)
+    transformed_position = transformed_full_pose[:,:3,3]
+    transformed_r_matrix = transformed_full_pose[:,:3,:3]
+
+    transformed_rot = rotation_transformer.inverse(transformed_r_matrix)
+    
+    transformed_se3_vector = np.hstack((transformed_position, transformed_rot))
+    transformed_se3_vector = transformed_se3_vector.reshape(org_shape)
+    return transformed_se3_vector
+
+
+def deabs_se3_vector(se3_vector, pose_0):
+    # assuming D is position + rotation_6d
+    assert se3_vector.shape[-1] == 9
+    
+    org_shape = se3_vector.shape
+    se3_vector = se3_vector.reshape(-1,org_shape[-1])
+
+    # switch full pose matrix
+    rotation_transformer = RotationTransformer(from_rep='rotation_6d', to_rep='matrix')
+
+    position = se3_vector[:,:3] 
+    rot = se3_vector[:,3:] 
+    rot = rotation_transformer.forward(rot)
+
+    position = np.expand_dims(position,2) # N,3,1
+    partial_pose = np.concatenate((rot,position),2) # N,3,4
+    full_pose = np.concatenate((partial_pose, np.repeat([[[0,0,0,1]]],partial_pose.shape[0],0)),1) # N,4,4
+    
+    # centering traj on first pose
+    transformed_full_pose = pose_0 @ full_pose
     transformed_position = transformed_full_pose[:,:3,3]
     transformed_r_matrix = transformed_full_pose[:,:3,:3]
 
@@ -127,21 +176,6 @@ def abs_grad(traj, pose_0):
     return traj
 
 
-def deabs_traj(traj, pose_0):
-    assert traj.shape[-1] == 3
-    org_shape = traj.shape
-    traj = traj.reshape(-1,3).T
-
-    # switch into homogenous coordinates
-    homo_coord = np.ones((1,traj.shape[1]))
-    traj_homo = np.vstack((traj, homo_coord))
-
-    # decentering traj on first pose
-    transformed_traj_homo = pose_0 @ traj_homo
-    traj = transformed_traj_homo[:3].reshape(org_shape)
-    return traj
-
-
 def robosuite_data_to_obj_dataset(data):
     # data/demo_0/obs/object
     object_dataset = []
@@ -152,10 +186,8 @@ def robosuite_data_to_obj_dataset(data):
     return object_dataset
 
 def to_obj_pose(object_dataset):
-    R = scipy.spatial.transform.Rotation
-    object_quat = object_dataset[:,3:7] # obj dim: [nut_pos, nut_quat, nut_to_eef_pos, nut_to_eef_quat]
-    r = R.from_quat(object_quat)
-    object_rotation = r.as_matrix()
+    rotation_transformer = RotationTransformer(from_rep='rotation_6d', to_rep='matrix')
+    object_rotation = rotation_transformer.forward(object_dataset[:,3:7]) # obj dim: [nut_pos, nut_quat, nut_to_eef_pos, nut_to_eef_quat]
     object_pos = object_dataset[:,:3]
 
     object_pos = np.expand_dims(object_pos,2)
