@@ -127,32 +127,32 @@ def main(checkpoint, output_dir, device, screen_size):
             horizon_data = np.copy(dataset[f'data/demo_{n}/obs/object'][chunks[i]:chunks[i+1]])
             obj_pose = to_obj_pose(horizon_data) # H,4,4
             kp = gen_keypoints(obj_pose) # H,n_kp,D_kp
+            print('kp', kp[:,0])
             abs_kp = abs_traj(kp, obj_pose[0]).reshape(cfg.horizon,-1)
             
-            rotation_transformer = RotationTransformer(
-                from_rep='axis_angle', to_rep='rotation_6d')
+            rotation_transformer = RotationTransformer(from_rep='axis_angle', to_rep='rotation_6d')
             actions = np.copy(dataset[f'data/demo_{n}/actions'][chunks[i]:chunks[i+1]])
-            init_action = np.hstack((abs_se3_vector(np.hstack((actions[:1,:3], rotation_transformer.forward(actions[:1,3:6]))), obj_pose[0]),
-                                     actions[:1,6:]))
+            actions = np.hstack((abs_se3_vector(np.hstack((actions[:,:3], rotation_transformer.forward(actions[:,3:6]))), obj_pose[0]), actions[:,6:]))
+            init_action = actions[:1]
 
-            print('true', actions)
+            # print('true', actions)
             # init_action = centralize(np.expand_dims(info['pos_agent'],0), center_pos, center_ang, screen_size)
 
             np_obs_dict = {
                 'obs': abs_kp[None].astype(np.float32),
                 'init_action': init_action.astype(np.float32)
             }
-
+            
             # device transfer
             obs_dict = dict_apply(np_obs_dict, 
                 lambda x: torch.from_numpy(x).to(
                     device=device))
 
-            # # run policy
+            # run policy
             with torch.no_grad():
                 action_dict = policy.predict_action(obs_dict)
 
-            # # device_transfer
+            # device_transfer
             np_action_dict = dict_apply(action_dict,
                 lambda x: x.detach().to('cpu').numpy())
 
@@ -162,12 +162,13 @@ def main(checkpoint, output_dir, device, screen_size):
                                             rotation_transformer.inverse(detrans_np_action[:,3:9]),
                                             np_action[:,9:]))
 
-            print('predicted', detrans_np_action)
+            # print('predicted', np_action)
 
             # step env and render
             for i in range(detrans_np_action.shape[0]):
                 # step env and render
                 act = detrans_np_action[i]
+                print('env', obs[:3])
                 obs, reward, done, info = env.step(act)
                 img = env.render(mode='rgb_array')
                 env_imgs.append(img)

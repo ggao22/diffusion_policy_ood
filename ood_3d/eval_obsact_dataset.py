@@ -102,7 +102,8 @@ def main(checkpoint, output_dir, device):
     # ani.save(os.path.join(output_dir,'obsact_abs_dataset.mp4'), writer='ffmpeg', fps=10) 
     # ani.save(os.path.join(output_dir,'obsact_abs_loader_dataset.mp4'), writer='ffmpeg', fps=10) 
     # ani.save(os.path.join(output_dir,'obsact_orgee_loader_dataset.mp4'), writer='ffmpeg', fps=10) 
-    ani.save(os.path.join(output_dir,'obsact_absee_loader_dataset.mp4'), writer='ffmpeg', fps=10) 
+    # ani.save(os.path.join(output_dir,'obsact_absee_loader_dataset.mp4'), writer='ffmpeg', fps=10) 
+    ani.save(os.path.join(output_dir,'obsact_test_deabs_dataset.mp4'), writer='ffmpeg', fps=10) 
     plt.show()
 
 

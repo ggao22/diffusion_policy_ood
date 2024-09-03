@@ -17,7 +17,7 @@ from diffusion_policy.common.normalize_util import (
     get_identity_normalizer_from_stat,
     array_to_stats
 )
-from ood_3d.utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector
+from ood_3d.utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, deabs_se3_vector
 
 class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
     def __init__(self,
@@ -126,11 +126,13 @@ class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
 
         obj_pose = to_obj_pose(data['obs']) # H,4,4
         kp = gen_keypoints(obj_pose) # H,n_kp,D_kp
-        abs_kp = abs_traj(kp, obj_pose[0])
-        data['obs'] = abs_kp.reshape(-1,9)
-        # data['obs'] = kp.reshape(-1,9)
+        # abs_kp = abs_traj(kp, obj_pose[0])
+        # data['obs'] = abs_kp.reshape(-1,9)
+        data['obs'] = kp.reshape(-1,9)
         
         data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], obj_pose[0])
+        data['action'][...,:9] = deabs_se3_vector(data['action'][...,:9], obj_pose[0])
+
 
         torch_data = dict_apply(data, torch.from_numpy)
         return torch_data
