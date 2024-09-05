@@ -93,7 +93,8 @@ class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
         normalizer = LinearNormalizer()
 
         # action
-        stat = array_to_stats(self.replay_buffer['action'])
+        datadict = _get_full_obsact_dict(self.sampler)
+        stat = array_to_stats(datadict['action'])
         if self.abs_action:
             if stat['mean'].shape[-1] > 10:
                 # dual arm
@@ -109,8 +110,7 @@ class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
         normalizer['action'] = this_normalizer
         
         # aggregate obs stats
-        obs_stat = array_to_stats(self.replay_buffer['obs'])
-
+        obs_stat = array_to_stats(datadict['obs'].astype('float32'))
 
         normalizer['obs'] = normalizer_from_stat(obs_stat)
         return normalizer
@@ -123,17 +123,7 @@ class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         data = self.sampler.sample_sequence(idx)
-
-        obj_pose = to_obj_pose(data['obs']) # H,4,4
-        kp = gen_keypoints(obj_pose) # H,n_kp,D_kp
-        # abs_kp = abs_traj(kp, obj_pose[0])
-        # data['obs'] = abs_kp.reshape(-1,9)
-        data['obs'] = kp.reshape(-1,9)
-        
-        data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], obj_pose[0])
-        data['action'][...,:9] = deabs_se3_vector(data['action'][...,:9], obj_pose[0])
-
-
+        data = _absolute_data(data)
         torch_data = dict_apply(data, torch.from_numpy)
         return torch_data
 
@@ -181,3 +171,28 @@ def _data_to_obs(raw_obs, raw_actions, obs_keys, abs_action, rotation_transforme
         'action': raw_actions
     }
     return data
+
+
+def _get_full_obsact_dict(sampler):
+    datadict = {
+        'obs': np.array([]),
+        'action': np.array([]),
+    }
+    for idx in range(0,len(sampler),2):
+        data = sampler.sample_sequence(idx)
+        data = _absolute_data(data)
+        datadict['obs'] = np.vstack((datadict['obs'], data['obs'])) if datadict['obs'].size else data['obs']
+        datadict['action'] = np.vstack((datadict['action'], data['action'])) if datadict['action'].size else data['action']
+    return datadict
+
+def _absolute_data(data):
+    obj_pose = to_obj_pose(data['obs']) # H,4,4
+    kp = gen_keypoints(obj_pose) # H,n_kp,D_kp
+    abs_kp = abs_traj(kp, obj_pose[0])
+    data['obs'] = abs_kp.reshape(-1,9)
+    # data['obs'] = kp.reshape(-1,9)
+    
+    data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], obj_pose[0])
+    # data['action'][...,:9] = deabs_se3_vector(data['action'][...,:9], obj_pose[0])
+    return data
+

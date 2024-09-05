@@ -186,7 +186,7 @@ def robosuite_data_to_obj_dataset(data):
     return object_dataset
 
 def to_obj_pose(object_dataset):
-    rotation_transformer = RotationTransformer(from_rep='rotation_6d', to_rep='matrix')
+    rotation_transformer = RotationTransformer(from_rep='quaternion', to_rep='matrix')
     object_rotation = rotation_transformer.forward(object_dataset[:,3:7]) # obj dim: [nut_pos, nut_quat, nut_to_eef_pos, nut_to_eef_quat]
     object_pos = object_dataset[:,:3]
 

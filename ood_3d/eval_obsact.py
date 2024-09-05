@@ -54,8 +54,7 @@ def create_env(env_meta, obs_keys):
 @click.option('-c', '--checkpoint', required=True)
 @click.option('-o', '--output_dir', required=True)
 @click.option('-d', '--device', default='cuda:0')
-@click.option('-s', '--screen_size', default=512)
-def main(checkpoint, output_dir, device, screen_size):
+def main(checkpoint, output_dir, device):
     if os.path.exists(output_dir):
         click.confirm(f"Output path {output_dir} already exists! Overwrite?", abort=True)
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -115,9 +114,15 @@ def main(checkpoint, output_dir, device, screen_size):
         render_camera_name='agentview',
     )
 
+    vec2rot6d = RotationTransformer(from_rep='axis_angle', to_rep='rotation_6d')
+    quat2mat = RotationTransformer(from_rep='quaternion', to_rep='matrix')
+    mat2rot6d = RotationTransformer(from_rep='matrix', to_rep='rotation_6d')
+    euler2mat = RotationTransformer(from_rep='euler_angles', from_convention='YXZ', to_rep='matrix')
+
     env_imgs = []
-    for n in range(2):
-        env.env.env.init_state = dataset[f'data/demo_{n}/states'][0]
+    for n in range(1):
+        env.init_state = dataset[f'data/demo_{n}/states'][0]
+        # i=10,11,12 is xyz of object
         obs = env.reset()
         img = env.render(mode='rgb_array')
 
@@ -127,20 +132,24 @@ def main(checkpoint, output_dir, device, screen_size):
             horizon_data = np.copy(dataset[f'data/demo_{n}/obs/object'][chunks[i]:chunks[i+1]])
             obj_pose = to_obj_pose(horizon_data) # H,4,4
             kp = gen_keypoints(obj_pose) # H,n_kp,D_kp
-            print('kp', kp[:,0])
-            abs_kp = abs_traj(kp, obj_pose[0]).reshape(cfg.horizon,-1)
-            
-            rotation_transformer = RotationTransformer(from_rep='axis_angle', to_rep='rotation_6d')
-            actions = np.copy(dataset[f'data/demo_{n}/actions'][chunks[i]:chunks[i+1]])
-            actions = np.hstack((abs_se3_vector(np.hstack((actions[:,:3], rotation_transformer.forward(actions[:,3:6]))), obj_pose[0]), actions[:,6:]))
-            init_action = actions[:1]
 
-            # print('true', actions)
-            # init_action = centralize(np.expand_dims(info['pos_agent'],0), center_pos, center_ang, screen_size)
+            cur_obj_pose = to_obj_pose(obs[None])
+            abs_kp = abs_traj(kp, obj_pose[0])
+            
+            actions = np.copy(dataset[f'data/demo_{n}/actions'][chunks[i]:chunks[i+1]])
+            trans_actions = np.hstack((abs_se3_vector(np.hstack((actions[:,:3], vec2rot6d.forward(actions[:,3:6]))), cur_obj_pose[0]), actions[:,6:]))
+            init_action = trans_actions[:1]
+
+            cur_quat = np.concatenate((obs[14+6:14+7], obs[14+3:14+6]))
+            cur_mat_corrected = quat2mat.forward(cur_quat) @ euler2mat.forward(np.array([0, 0, -np.pi/2]))
+            cur_rot6d_corrected = mat2rot6d.forward(cur_mat_corrected)
+            cur_se3 = np.concatenate((obs[14:14+3], cur_rot6d_corrected))[None]
+            gripper = -1 if sum(np.abs(obs[-2:]))/2 > 0.02 else 1
+            cur_action = np.hstack((abs_se3_vector(cur_se3, cur_obj_pose[0]), np.array([[gripper]])))
 
             np_obs_dict = {
-                'obs': abs_kp[None].astype(np.float32),
-                'init_action': init_action.astype(np.float32)
+                'obs': abs_kp.reshape(cfg.horizon,-1)[None].astype(np.float32),
+                'init_action': cur_action.astype(np.float32)
             }
             
             # device transfer
@@ -157,25 +166,22 @@ def main(checkpoint, output_dir, device, screen_size):
                 lambda x: x.detach().to('cpu').numpy())
 
             np_action = np_action_dict['action_pred'].squeeze(0)
-            detrans_np_action = deabs_se3_vector(np_action[:,:9], obj_pose[0])
+            detrans_np_action = deabs_se3_vector(np_action[:,:9], cur_obj_pose[0])
             detrans_np_action = np.hstack((detrans_np_action[:,:3], 
-                                            rotation_transformer.inverse(detrans_np_action[:,3:9]),
+                                            vec2rot6d.inverse(detrans_np_action[:,3:9]),
                                             np_action[:,9:]))
-
-            # print('predicted', np_action)
-
+            
             # step env and render
             for i in range(detrans_np_action.shape[0]):
                 # step env and render
                 act = detrans_np_action[i]
-                print('env', obs[:3])
                 obs, reward, done, info = env.step(act)
                 img = env.render(mode='rgb_array')
                 env_imgs.append(img)
 
 
     ani = FuncAnimation(fig, animate, frames=env_imgs, interval=100, save_count=sys.maxsize)
-    ani.save(os.path.join(output_dir,'obsact.mp4'), writer='ffmpeg', fps=10) 
+    ani.save(os.path.join(output_dir,'env_test.mp4'), writer='ffmpeg', fps=10) 
     plt.show()
 
 
