@@ -28,9 +28,9 @@ def main(cfg: OmegaConf):
     OmegaConf.resolve(cfg)
 
     cls = hydra.utils.get_class(cfg._target_)
-    resume_output_dir = 'data/outputs/2024.09.04/16.57.44_train_diffusion_unet_lowdim_obsact_square_lowdim'
-    workspace: BaseWorkspace = cls(cfg,resume_output_dir)
-    # workspace: BaseWorkspace = cls(cfg)
+    # resume_output_dir = 'data/outputs/2024.09.04/16.57.44_train_diffusion_unet_lowdim_obsact_square_lowdim'
+    # workspace: BaseWorkspace = cls(cfg,resume_output_dir)
+    workspace: BaseWorkspace = cls(cfg)
     workspace.run()
 
 if __name__ == "__main__":
