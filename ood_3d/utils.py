@@ -1,19 +1,26 @@
 import os
+import sys
+sys.path.append('../')
 
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from torchvision import transforms
 import scipy
-    
+
 from diffusion_policy.model.common.rotation_transformer import RotationTransformer
 
 # plotting
+azim = 50
+elev = 15
+
 def draw_latent(zs, save_path):
     fig = plt.figure(figsize=(18,10))
     fig.tight_layout()
     for o in range(1,4):
         ax = fig.add_subplot(1, 3, o, projection='3d')
+        ax.azim = azim
+        ax.elev = elev
         x = zs[:,3*(o-1)+0]
         y = zs[:,3*(o-1)+1]
         z = zs[:,3*(o-1)+2]
@@ -30,6 +37,8 @@ def draw_ood_latent(zs, ood_zs, save_path, grad_arrows=np.array(None), MVNs=[]):
     fig.tight_layout()
     for o in range(1,4):
         ax = fig.add_subplot(1, 3, o, projection='3d')
+        ax.azim = azim
+        ax.elev = elev
         x = zs[:,3*(o-1)+0]
         y = zs[:,3*(o-1)+1]
         z = zs[:,3*(o-1)+2]

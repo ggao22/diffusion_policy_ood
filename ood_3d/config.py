@@ -8,7 +8,7 @@ cfg = {
         "n_components": 6,
         
         # testing cfgs
-        'testing_dir': '/home/georgegao/diffusion_policy_ood/ood_3d/output/square/low_dim/08-27-2024_17-14-47',
+        'testing_dir': '/home/georgegao/diffusion_policy_ood/ood_3d/output/square/low_dim_abs/08-27-2024_17-14-47',
         'n_pts_tested': 100,
 
         # # rec cfg
@@ -26,5 +26,6 @@ combined_policy_cfg = {
     'recovery_ckpt': '/home/georgegao/diffusion_policy_ood/data/outputs/2024.09.05/18.57.19_train_diffusion_unet_lowdim_obsact_square_lowdim/checkpoints/latest.ckpt',
     'base_ckpt': "/home/georgegao/diffusion_policy_ood/data/outputs/2024.09.05/16.12.10_train_diffusion_unet_lowdim_square_lowdim_abs/checkpoints/epoch=0250-test_mean_score=0.960.ckpt",
 }
+
 
 

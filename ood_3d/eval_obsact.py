@@ -120,7 +120,8 @@ def main(checkpoint, output_dir, device):
     euler2mat = RotationTransformer(from_rep='euler_angles', from_convention='YXZ', to_rep='matrix')
 
     env_imgs = []
-    for n in range(1):
+    envs_tested = list(range(0,5))
+    for n in envs_tested:
         env.init_state = dataset[f'data/demo_{n}/states'][0]
         # i=10,11,12 is xyz of object
         obs = env.reset()
@@ -175,7 +176,8 @@ def main(checkpoint, output_dir, device):
             for i in range(detrans_np_action.shape[0]):
                 # step env and render
                 act = detrans_np_action[i]
-                obs, reward, done, info = env.step(act)
+                for _ in range(3):
+                    obs, reward, done, info = env.step(act)
                 img = env.render(mode='rgb_array')
                 env_imgs.append(img)
 
