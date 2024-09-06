@@ -52,7 +52,9 @@ def main(checkpoint, output_dir, device):
     dataset: BaseLowdimDataset
     dataset = hydra.utils.instantiate(cfg.task.dataset)
 
-    print(dataset.replay_buffer.keys())
+    print(len(dataset.sampler))
+
+    print(dataset.replay_buffer['obs'].shape)
     episode_starts = [0] + list(dataset.replay_buffer.episode_ends[:-1])
     # print(dataset.replay_buffer['obs'][:episode_starts[1]][:,:3])
 

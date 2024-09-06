@@ -143,9 +143,11 @@ def _data_to_obs(raw_obs, raw_actions, obs_keys, abs_action, rotation_transforme
         raw_obs[key] for key in obs_keys
     ], axis=-1).astype(np.float32)
 
-    # HARD CODING
-    # Setting object obs array length from 14 to 9, to fit the keypoint array length
-    obs = obs[:,:9]
+    # Take object first 7 dimensions only
+    obs = np.concatenate([
+        obs[:,:7], obs[:,14:]
+    ], axis=-1).astype(np.float32)
+    
     
 
     if abs_action:
@@ -168,6 +170,7 @@ def _data_to_obs(raw_obs, raw_actions, obs_keys, abs_action, rotation_transforme
     
     data = {
         'obs': obs,
+        # 'kp_gradient': ,
         'action': raw_actions
     }
     return data
@@ -185,14 +188,20 @@ def _get_full_obsact_dict(sampler):
         datadict['action'] = np.vstack((datadict['action'], data['action'])) if datadict['action'].size else data['action']
     return datadict
 
+def _get_kp_gradient_from_obs(obs):
+    print(obs.shape)
+    obj_pose = to_obj_pose(obs[:,:7]) # N,4,4
+    kp = gen_keypoints(obj_pose).reshape(-1,9) # N,n_kp*D_kp
+
 def _absolute_data(data):
-    obj_pose = to_obj_pose(data['obs']) # H,4,4
+    obj_pose = to_obj_pose(data['obs'][:,:7]) # H,4,4
     kp = gen_keypoints(obj_pose) # H,n_kp,D_kp
-    abs_kp = abs_traj(kp, obj_pose[0])
-    data['obs'] = abs_kp.reshape(-1,9)
-    # data['obs'] = kp.reshape(-1,9)
+    abs_kp = abs_traj(kp, obj_pose[0]).reshape(-1,9)
+    abs_ee = abs_se3_vector(data['obs'][:,7:14], obj_pose[0])
+    data['obs'][:,:14] = np.concatenate([
+        abs_kp, abs_ee
+    ], axis=-1)
     
     data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], obj_pose[0])
-    # data['action'][...,:9] = deabs_se3_vector(data['action'][...,:9], obj_pose[0])
     return data
 

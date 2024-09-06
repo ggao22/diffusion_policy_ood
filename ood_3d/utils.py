@@ -105,13 +105,16 @@ def deabs_traj(traj, pose_0):
 
 def abs_se3_vector(se3_vector, pose_0):
     # assuming D is position + rotation_6d
-    assert se3_vector.shape[-1] == 9
-    
+    assert se3_vector.shape[-1]==9 or se3_vector.shape[-1]==7
+
     org_shape = se3_vector.shape
     se3_vector = se3_vector.reshape(-1,org_shape[-1])
 
     # switch full pose matrix
-    rotation_transformer = RotationTransformer(from_rep='rotation_6d', to_rep='matrix')
+    if se3_vector.shape[-1]==9:
+        rotation_transformer = RotationTransformer(from_rep='rotation_6d', to_rep='matrix')
+    else:
+        rotation_transformer = RotationTransformer(from_rep='quaternion', to_rep='matrix')
 
     position = se3_vector[:,:3] 
     rot = se3_vector[:,3:] 
