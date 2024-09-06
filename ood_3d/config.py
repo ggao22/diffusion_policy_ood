@@ -3,12 +3,12 @@ cfg = {
         # main cfgs
         "output_dir": "output",
         "task": "square",
-        "datatype": "low_dim",
+        "datatype": "low_dim_abs",
 
         "n_components": 6,
         
         # testing cfgs
-        'testing_dir': '/home/georgegao/diffusion_policy_ood/ood_3d/output/square/low_dim/08-27-2024_17-14-47',
+        'testing_dir': '/home/georgegao/diffusion_policy_ood/ood_3d/output/square/low_dim_abs/08-27-2024_17-14-47',
         'n_pts_tested': 100,
 
         # # rec cfg

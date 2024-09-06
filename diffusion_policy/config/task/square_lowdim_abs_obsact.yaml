@@ -1,6 +1,6 @@
 name: square_lowdim
 
-obs_dim: 16
+obs_dim: 18
 action_dim: 10
 keypoint_dim: 3
 

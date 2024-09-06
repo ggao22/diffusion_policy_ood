@@ -17,7 +17,7 @@ from diffusion_policy.common.normalize_util import (
     get_identity_normalizer_from_stat,
     array_to_stats
 )
-from ood_3d.utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, deabs_se3_vector
+from ood_3d.utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, abs_grad
 
 class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
     def __init__(self,
@@ -48,7 +48,8 @@ class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
                     raw_actions=demo['actions'][:].astype(np.float32),
                     obs_keys=obs_keys,
                     abs_action=abs_action,
-                    rotation_transformer=rotation_transformer)
+                    rotation_transformer=rotation_transformer,
+                    horizon=horizon)
                 replay_buffer.add_episode(episode)
 
         val_mask = get_val_mask(
@@ -137,18 +138,18 @@ def normalizer_from_stat(stat):
         input_stats_dict=stat
     )
     
-def _data_to_obs(raw_obs, raw_actions, obs_keys, abs_action, rotation_transformer):
+def _data_to_obs(raw_obs, raw_actions, obs_keys, abs_action, rotation_transformer, horizon):
    
     obs = np.concatenate([
         raw_obs[key] for key in obs_keys
     ], axis=-1).astype(np.float32)
 
-    # Take object first 7 dimensions only
+    # Take object first 9 dimensions only (7 actually used, 9 to fill array for keypoints)
     obs = np.concatenate([
-        obs[:,:7], obs[:,14:]
+        obs[:,:9], obs[:,14:]
     ], axis=-1).astype(np.float32)
     
-    
+    kp_gradient = _get_kp_gradient_from_obs(obs,horizon).astype(np.float32)
 
     if abs_action:
         is_dual_arm = False
@@ -170,7 +171,7 @@ def _data_to_obs(raw_obs, raw_actions, obs_keys, abs_action, rotation_transforme
     
     data = {
         'obs': obs,
-        # 'kp_gradient': ,
+        'kp_gradient': kp_gradient,
         'action': raw_actions
     }
     return data
@@ -188,20 +189,38 @@ def _get_full_obsact_dict(sampler):
         datadict['action'] = np.vstack((datadict['action'], data['action'])) if datadict['action'].size else data['action']
     return datadict
 
-def _get_kp_gradient_from_obs(obs):
-    print(obs.shape)
+def _get_kp_gradient_from_obs(obs,horizon):
     obj_pose = to_obj_pose(obs[:,:7]) # N,4,4
-    kp = gen_keypoints(obj_pose).reshape(-1,9) # N,n_kp*D_kp
+    kp = gen_keypoints(obj_pose) # N,n_kp,D_kp
+    N,n_kp,D_kp = kp.shape
+    kp = kp.reshape(N,n_kp*D_kp)
+    
+    kp_gradient = []
+    for idx in range(kp.shape[0]):
+        diff_idx = idx+horizon-1
+        if diff_idx >= kp.shape[0]:
+            diff_idx = -1
+        diff = kp[diff_idx]-kp[idx]
+        diff = diff.reshape(n_kp,D_kp)
+        mean_diff = diff.mean(axis=0)
+        norm_mean_diff = mean_diff/np.linalg.norm(mean_diff)
+        kp_gradient.append(norm_mean_diff)
+
+    kp_gradient = np.nan_to_num(np.array(kp_gradient))
+    return kp_gradient
 
 def _absolute_data(data):
     obj_pose = to_obj_pose(data['obs'][:,:7]) # H,4,4
     kp = gen_keypoints(obj_pose) # H,n_kp,D_kp
     abs_kp = abs_traj(kp, obj_pose[0]).reshape(-1,9)
     abs_ee = abs_se3_vector(data['obs'][:,7:14], obj_pose[0])
-    data['obs'][:,:14] = np.concatenate([
+    data['obs'][:,:16] = np.concatenate([
         abs_kp, abs_ee
-    ], axis=-1)
+    ], axis=-1).astype(np.float32)
+
+    kp_gradient = data['kp_gradient']
+    data['kp_gradient'] = abs_grad(kp_gradient, obj_pose[0]).astype(np.float32)
     
-    data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], obj_pose[0])
+    data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], obj_pose[0]).astype(np.float32)
     return data
 

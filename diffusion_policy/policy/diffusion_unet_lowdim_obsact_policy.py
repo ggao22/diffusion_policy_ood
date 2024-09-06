@@ -23,7 +23,6 @@ class DiffusionUnetLowdimObsactPolicy(BaseLowdimPolicy):
             obs_as_local_cond=False,
             obs_as_global_cond=False,
             pred_action_steps_only=False,
-            initial_action_condition=False,
             oa_step_convention=False,
             # parameters passed to step
             **kwargs):
@@ -49,7 +48,6 @@ class DiffusionUnetLowdimObsactPolicy(BaseLowdimPolicy):
         self.obs_as_local_cond = obs_as_local_cond
         self.obs_as_global_cond = obs_as_global_cond
         self.pred_action_steps_only = pred_action_steps_only
-        self.initial_action_condition = initial_action_condition
         self.oa_step_convention = oa_step_convention
         self.kwargs = kwargs
 
@@ -107,9 +105,8 @@ class DiffusionUnetLowdimObsactPolicy(BaseLowdimPolicy):
         assert 'obs' in obs_dict
         assert 'past_action' not in obs_dict # not implemented yet
         nobs = self.normalizer['obs'].normalize(obs_dict['obs'])
-        if self.initial_action_condition:
-            assert 'init_action' in obs_dict
-            ninit_action = self.normalizer['action'].normalize(obs_dict['init_action']) # batch, 2
+        obj_grad = obs_dict['kp_gradient'][:,0,:]
+
         B, _, Do = nobs.shape
         To = self.n_obs_steps
         assert Do == self.obs_dim
@@ -134,8 +131,8 @@ class DiffusionUnetLowdimObsactPolicy(BaseLowdimPolicy):
         elif self.obs_as_global_cond:
             # condition throught global feature
             global_cond = nobs[:,:To].reshape(nobs.shape[0], -1)
-            if self.initial_action_condition:
-                global_cond = torch.hstack((ninit_action, global_cond))
+            # ADDING OBJECT GRADIENT
+            global_cond = torch.hstack((obj_grad, global_cond))
             shape = (B, T, Da)
             if self.pred_action_steps_only:
                 shape = (B, self.n_action_steps, Da)
@@ -190,10 +187,13 @@ class DiffusionUnetLowdimObsactPolicy(BaseLowdimPolicy):
     def compute_loss(self, batch):
         # normalize input
         assert 'valid_mask' not in batch
-        nbatch = self.normalizer.normalize(batch)
-        obs = nbatch['obs']
-        action = nbatch['action']
-        # print((action[:,0,:] == self.normalizer['action'].normalize(batch['action'][:,0,:])).all())
+        # nbatch = self.normalizer.normalize(batch)
+        # obs = nbatch['obs']
+        # action = nbatch['action']
+
+        obs = self.normalizer['obs'].normalize(batch['obs'])
+        action = self.normalizer['action'].normalize(batch['action'])
+        obj_grad = batch['kp_gradient'][:,0,:]
 
         # handle different ways of passing observation
         local_cond = None
@@ -206,9 +206,8 @@ class DiffusionUnetLowdimObsactPolicy(BaseLowdimPolicy):
         elif self.obs_as_global_cond:
             global_cond = obs[:,:self.n_obs_steps,:].reshape(
                 obs.shape[0], -1)
-            if self.initial_action_condition:
-                initial_action = action[:,0,:]
-                global_cond = torch.hstack((initial_action, global_cond))
+            # ADDING OBJECT GRADIENT
+            global_cond = torch.hstack((obj_grad, global_cond))
             if self.pred_action_steps_only:
                 To = self.n_obs_steps
                 start = To

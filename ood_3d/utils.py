@@ -168,14 +168,13 @@ def deabs_se3_vector(se3_vector, pose_0):
 
 def abs_grad(traj, pose_0):
     assert traj.shape[-1] == 3
+    ### METHOD 2 ###
     org_shape = traj.shape
-    traj = traj.reshape(-1,3).T
-    pose_0_inv = np.linalg.inv(pose_0)
+    traj = traj.reshape(-1,3) #n_kp,D_kp
 
-    # center grad on first pose
-    R = pose_0_inv[:3,:3]
-    traj = R @ traj
-    traj = traj.reshape(org_shape)
+    # centering traj on first pose
+    transformed_kp_grad = np.linalg.solve(pose_0[:3,:3], traj.T).T #n_kp,D_kp
+    traj = transformed_kp_grad.reshape(org_shape)
     return traj
 
 
