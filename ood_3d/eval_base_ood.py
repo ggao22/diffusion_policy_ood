@@ -39,6 +39,8 @@ from models import GMMGradient
 from config import cfg as rec_cfg
 
 
+
+
 def create_env(env_meta, obs_keys):
     ObsUtils.initialize_obs_modality_mapping_from_dict(
         {'low_dim': obs_keys})
@@ -52,6 +54,16 @@ def create_env(env_meta, obs_keys):
         use_image_obs=False, 
     )
     return env
+
+
+def add_obs(new_obs, past_obs, n_obs_steps):
+    new_obs = new_obs[None]
+    if len(past_obs) < 1:
+        past_obs = np.repeat(new_obs, n_obs_steps, 0)
+    else:
+        old_obs = past_obs[:-1]
+        past_obs = np.vstack((new_obs,old_obs))
+    return past_obs
 
 
 @click.command()
@@ -77,9 +89,10 @@ def main(checkpoint, output_dir, device):
     fig, ax = plt.subplots()
 
     def animate(args):
-        env_img = args
+        env_img, env_num = args
         ax.cla()
         ax.imshow(env_img)
+        ax.set_title(f"Env #{str(env_num)}")
 
     # get policy from workspace
     policy = workspace.model
@@ -119,57 +132,28 @@ def main(checkpoint, output_dir, device):
     )
 
     vec2rot6d = RotationTransformer(from_rep='axis_angle', to_rep='rotation_6d')
-    quat2mat = RotationTransformer(from_rep='quaternion', to_rep='matrix')
-    mat2rot6d = RotationTransformer(from_rep='matrix', to_rep='rotation_6d')
-    euler2mat = RotationTransformer(from_rep='euler_angles', from_convention='YXZ', to_rep='matrix')
 
-    gmms = []
-    for i in range(3):
-        gmms.append(GaussianMixture(n_components=rec_cfg["n_components"]))
-
-    gmms_params = np.load(os.path.join(rec_cfg['testing_dir'], "gmms.npz"), allow_pickle=True)
-    for i in range(len(gmms_params)):
-        for (key,val) in gmms_params[str(i)][()].items():
-            setattr(gmms[i], key, val)
-
-    rec_policy = GMMGradient(gmms_params)
-
-    rec_iter = 15
     env_imgs = []
-    env_idx = 11
-    for n in range(env_idx,env_idx+1):
+    max_iter = 35
+    n_obs_steps = cfg.n_obs_steps
+    envs_tested = list(range(20))
+    ood_offsets = np.random.uniform([-0.05,-0.3],[0.05,-0.15],(len(envs_tested),2))
+    env_labels = []
+    rewards = []
+    for n in envs_tested:
         env.init_state = dataset[f'data/demo_{n}/states'][0]
         # i=10,11,12 is xyz of object
-        env.init_state[11] = env.init_state[11] - 0.3
-        env.init_state[10] = env.init_state[10] + 0.1
+        # env.init_state[10:12] = env.init_state[10:12] + ood_offsets[n]
         obs = env.reset()
+        past_obs = []
+        past_obs = add_obs(obs, past_obs, n_obs_steps)
         img = env.render(mode='rgb_array')
 
-        rec_policy.eta = 1.0
-
         # env policy control
-        delay = 16
-        for i in range(rec_iter):
-            cur_obj_pose = to_obj_pose(obs[:7][None])
-            cur_kp = gen_keypoints(cur_obj_pose) # 1,n_kp,D_kp
-            densities, rec_vectors = rec_policy(cur_kp)
-            print(np.mean(densities))
-            rec_vectors = rec_vectors.reshape(cur_kp.shape[1:])
-            print(rec_vectors.mean(axis=0))
-            kp_traj = generate_kp_traj(cur_kp[0], rec_vectors, horizon=16, delay=delay, alpha=0.0001) # H,n_kp,D_kp
-            if delay > 8: delay -= 1
-            abs_kp = abs_traj(kp_traj, cur_obj_pose[0])
-
-            cur_quat = np.concatenate((obs[14+6:14+7], obs[14+3:14+6]))
-            cur_mat_corrected = quat2mat.forward(cur_quat) @ euler2mat.forward(np.array([0, 0, -np.pi/2]))
-            cur_rot6d_corrected = mat2rot6d.forward(cur_mat_corrected)
-            cur_se3 = np.concatenate((obs[14:14+3], cur_rot6d_corrected))[None]
-            gripper = -1 if sum(np.abs(obs[-2:]))/2 > 0.02 else 1
-            cur_action = np.hstack((abs_se3_vector(cur_se3, cur_obj_pose[0]), np.array([[gripper]])))
-
+        for _ in range(max_iter):
             np_obs_dict = {
-                'obs': abs_kp.reshape(cfg.horizon,-1)[None].astype(np.float32),
-                'init_action': cur_action.astype(np.float32)
+                # handle n_latency_steps by discarding the last n_latency_steps
+                'obs': past_obs[None].astype(np.float32)
             }
             
             # device transfer
@@ -185,26 +169,32 @@ def main(checkpoint, output_dir, device):
             np_action_dict = dict_apply(action_dict,
                 lambda x: x.detach().to('cpu').numpy())
 
-            np_action = np_action_dict['action_pred'].squeeze(0)
-            detrans_np_action = deabs_se3_vector(np_action[:,:9], cur_obj_pose[0])
-
-            # print('difference',actions-np.hstack((detrans_np_action, np_action[:,9:])))
-
-            detrans_np_action = np.hstack((detrans_np_action[:,:3], 
-                                            vec2rot6d.inverse(detrans_np_action[:,3:9]),
-                                            np_action[:,9:]))
+            action = np_action_dict['action'].squeeze(0)
+            action = np.hstack((action[:,:3], 
+                                vec2rot6d.inverse(action[:,3:9]),
+                                action[:,9:]))
+            
             # step env and render
-            for i in range(12):
-                act = detrans_np_action[i]
-                for _ in range(3):
-                    # step env and render
-                    obs, reward, done, info = env.step(act)
+            for i in range(action.shape[0]):
+                act = action[i]
+                obs, reward, done, info = env.step(act)
+                past_obs = add_obs(obs, past_obs, n_obs_steps)
                 img = env.render(mode='rgb_array')
                 env_imgs.append(img)
+                env_labels.append(n)
+                if reward > 0.98: done = True
+                if done: break
+            if done: break
+        rewards.append(reward)
+        if done:
+            print(f'Env #{n} done')
+        else:
+            print(f'Env #{n} failed, max iter reached. Reward Managed {reward}')
 
-
-    ani = FuncAnimation(fig, animate, frames=env_imgs, interval=100, save_count=sys.maxsize)
-    ani.save(os.path.join(output_dir,'recovery.mp4'), writer='ffmpeg', fps=10) 
+    
+    print(f"Test done, average reward {np.mean(rewards)}")
+    ani = FuncAnimation(fig, animate, frames=zip(env_imgs,env_labels), interval=100, save_count=sys.maxsize)
+    ani.save(os.path.join(output_dir,'base_id.mp4'), writer='ffmpeg', fps=10) 
     plt.show()
 
 

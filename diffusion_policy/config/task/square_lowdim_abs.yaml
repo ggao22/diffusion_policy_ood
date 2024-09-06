@@ -1,4 +1,4 @@
-name: square_lowdim
+name: square_lowdim_abs
 
 obs_dim: 23
 action_dim: 10
