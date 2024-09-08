@@ -17,7 +17,9 @@ from diffusion_policy.common.normalize_util import (
     get_identity_normalizer_from_stat,
     array_to_stats
 )
-from ood_3d.utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, abs_grad
+from ood_3d.utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, abs_grad, deabs_se3_vector, panda_ee_obs_correction
+
+from robosuite.utils.transform_utils import pose2mat
 
 class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
     def __init__(self,
@@ -144,6 +146,13 @@ def _data_to_obs(raw_obs, raw_actions, obs_keys, abs_action, rotation_transforme
         raw_obs[key] for key in obs_keys
     ], axis=-1).astype(np.float32)
 
+    # Correcting Quaternion
+    for t in range(len(obs)):
+        obs[t] = panda_ee_obs_correction(obs[t])
+    
+    # robot_in_world_frame = pose2mat((env.robots[0].base_pos, env.robots[0].base_ori))
+    # obs[:,14:14+7] = deabs_se3_vector(obs[:,14:14+7], robot_in_world_frame)
+
     # Take object first 9 dimensions only (7 actually used, 9 to fill array for keypoints)
     obs = np.concatenate([
         obs[:,:9], obs[:,14:]
@@ -212,15 +221,19 @@ def _get_kp_gradient_from_obs(obs,horizon):
 def _absolute_data(data):
     obj_pose = to_obj_pose(data['obs'][:,:7]) # H,4,4
     kp = gen_keypoints(obj_pose) # H,n_kp,D_kp
-    abs_kp = abs_traj(kp, obj_pose[0]).reshape(-1,9)
-    abs_ee = abs_se3_vector(data['obs'][:,7:14], obj_pose[0])
+    # abs_kp = abs_traj(kp, obj_pose[0]).reshape(-1,9)
+    # abs_ee = abs_se3_vector(data['obs'][:,7:14], obj_pose[0])
+
+    #test
+    abs_kp = kp.reshape(-1,9)
+    abs_ee = data['obs'][:,7:14]
     data['obs'][:,:16] = np.concatenate([
         abs_kp, abs_ee
     ], axis=-1).astype(np.float32)
 
-    kp_gradient = data['kp_gradient']
-    data['kp_gradient'] = abs_grad(kp_gradient, obj_pose[0]).astype(np.float32)
+    # kp_gradient = data['kp_gradient']
+    # data['kp_gradient'] = abs_grad(kp_gradient, obj_pose[0]).astype(np.float32)
     
-    data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], obj_pose[0]).astype(np.float32)
+    # data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], obj_pose[0]).astype(np.float32)
     return data
 

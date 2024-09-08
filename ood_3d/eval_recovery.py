@@ -32,7 +32,7 @@ import robomimic.utils.file_utils as FileUtils
 import robomimic.utils.env_utils as EnvUtils
 import robomimic.utils.obs_utils as ObsUtils
 
-from utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, deabs_se3_vector
+from utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, deabs_se3_vector, abs_grad
 
 from sklearn.mixture import GaussianMixture
 from models import GMMGradient
@@ -136,7 +136,7 @@ def main(checkpoint, output_dir, device):
 
     rec_iter = 15
     env_imgs = []
-    env_idx = 11
+    env_idx = 0
     for n in range(env_idx,env_idx+1):
         env.init_state = dataset[f'data/demo_{n}/states'][0]
         # i=10,11,12 is xyz of object
@@ -148,28 +148,23 @@ def main(checkpoint, output_dir, device):
         rec_policy.eta = 1.0
 
         # env policy control
-        delay = 16
         for i in range(rec_iter):
             cur_obj_pose = to_obj_pose(obs[:7][None])
             cur_kp = gen_keypoints(cur_obj_pose) # 1,n_kp,D_kp
-            densities, rec_vectors = rec_policy(cur_kp)
-            print(np.mean(densities))
-            rec_vectors = rec_vectors.reshape(cur_kp.shape[1:])
-            print(rec_vectors.mean(axis=0))
-            kp_traj = generate_kp_traj(cur_kp[0], rec_vectors, horizon=16, delay=delay, alpha=0.0001) # H,n_kp,D_kp
-            if delay > 8: delay -= 1
-            abs_kp = abs_traj(kp_traj, cur_obj_pose[0])
 
-            cur_quat = np.concatenate((obs[14+6:14+7], obs[14+3:14+6]))
-            cur_mat_corrected = quat2mat.forward(cur_quat) @ euler2mat.forward(np.array([0, 0, -np.pi/2]))
-            cur_rot6d_corrected = mat2rot6d.forward(cur_mat_corrected)
-            cur_se3 = np.concatenate((obs[14:14+3], cur_rot6d_corrected))[None]
-            gripper = -1 if sum(np.abs(obs[-2:]))/2 > 0.02 else 1
-            cur_action = np.hstack((abs_se3_vector(cur_se3, cur_obj_pose[0]), np.array([[gripper]])))
+            abs_kp = abs_traj(cur_kp, cur_obj_pose[0]).flatten()
+            abs_ee = abs_se3_vector(obs[14:21], cur_obj_pose[0])
+            obs = np.concatenate((abs_kp, abs_ee, obs[21:])) # n_kp*D_kp+7+2
+
+            densities, rec_vectors = rec_policy(cur_kp)
+            rec_vec = rec_vectors.reshape(cur_kp.shape[1:]).mean(axis=0)
+            norm_rec_vec = rec_vec/np.linalg.norm(rec_vec)
+            abs_norm_rec_vec = abs_grad(norm_rec_vec, cur_obj_pose[0])
+            print(abs_norm_rec_vec)
 
             np_obs_dict = {
-                'obs': abs_kp.reshape(cfg.horizon,-1)[None].astype(np.float32),
-                'init_action': cur_action.astype(np.float32)
+                'obs': obs[None][None].astype(np.float32),
+                'kp_gradient': abs_norm_rec_vec[None][None].astype(np.float32)
             }
             
             # device transfer
@@ -187,14 +182,11 @@ def main(checkpoint, output_dir, device):
 
             np_action = np_action_dict['action_pred'].squeeze(0)
             detrans_np_action = deabs_se3_vector(np_action[:,:9], cur_obj_pose[0])
-
-            # print('difference',actions-np.hstack((detrans_np_action, np_action[:,9:])))
-
             detrans_np_action = np.hstack((detrans_np_action[:,:3], 
                                             vec2rot6d.inverse(detrans_np_action[:,3:9]),
                                             np_action[:,9:]))
             # step env and render
-            for i in range(12):
+            for i in range(detrans_np_action.shape[0]):
                 act = detrans_np_action[i]
                 for _ in range(3):
                     # step env and render

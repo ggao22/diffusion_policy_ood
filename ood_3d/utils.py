@@ -104,7 +104,7 @@ def deabs_traj(traj, pose_0):
 
 
 def abs_se3_vector(se3_vector, pose_0):
-    # assuming D is position + rotation_6d
+    # assuming D is position + rotation_6d or position + quat
     assert se3_vector.shape[-1]==9 or se3_vector.shape[-1]==7
 
     org_shape = se3_vector.shape
@@ -137,14 +137,17 @@ def abs_se3_vector(se3_vector, pose_0):
 
 
 def deabs_se3_vector(se3_vector, pose_0):
-    # assuming D is position + rotation_6d
-    assert se3_vector.shape[-1] == 9
-    
+        # assuming D is position + rotation_6d or position + quat
+    assert se3_vector.shape[-1]==9 or se3_vector.shape[-1]==7
+
     org_shape = se3_vector.shape
     se3_vector = se3_vector.reshape(-1,org_shape[-1])
 
     # switch full pose matrix
-    rotation_transformer = RotationTransformer(from_rep='rotation_6d', to_rep='matrix')
+    if se3_vector.shape[-1]==9:
+        rotation_transformer = RotationTransformer(from_rep='rotation_6d', to_rep='matrix')
+    else:
+        rotation_transformer = RotationTransformer(from_rep='quaternion', to_rep='matrix')
 
     position = se3_vector[:,:3] 
     rot = se3_vector[:,3:] 
@@ -214,6 +217,17 @@ def gen_keypoints(poses, est_obj_size=0.05):
     return np.array(keypoints)
 
 
+
+def panda_ee_obs_correction(obs):
+    quat2mat = RotationTransformer(from_rep='quaternion', to_rep='matrix')
+    euler2mat = RotationTransformer(from_rep='euler_angles', from_convention='YXZ', to_rep='matrix')
+
+    # quat = np.concatenate((obs[14+6:14+7], obs[14+3:14+6]))
+    quat = obs[14+3:14+7]
+    mat_corrected = quat2mat.forward(quat) @ euler2mat.forward(np.array([0, 0, -np.pi/2]))
+    quat_corrected = quat2mat.inverse(mat_corrected)
+    obs[14+3:14+7] = quat_corrected
+    return obs
 
 # data stats utils
 def get_data_stats(data):
