@@ -72,6 +72,8 @@ def main(checkpoint, output_dir, device):
     pose[:,:3,:3] = rot
     pose[:,:3,3] = ee[:,:3]
     ee_kps = gen_keypoints(pose).reshape(ee.shape[0],-1)
+    print(ee_kps.shape)
+    print(obj_kps.shape)
     points = np.hstack((obj_kps,ee_kps))
 
     # eps = 1

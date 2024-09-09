@@ -23,7 +23,9 @@ cfg = {
 cfg["datapath"] = f'/home/georgegao/diffusion_policy_ood/data/robomimic/datasets/{cfg["task"]}/ph/{cfg["datatype"]}.hdf5'
 
 combined_policy_cfg = {
-    'recovery_ckpt': '/home/georgegao/diffusion_policy_ood/data/outputs/2024.09.05/18.57.19_train_diffusion_unet_lowdim_obsact_square_lowdim/checkpoints/latest.ckpt',
+    # best yet
+    # 'recovery_ckpt': '/home/georgegao/diffusion_policy_ood/data/outputs/2024.09.05/18.57.19_train_diffusion_unet_lowdim_obsact_square_lowdim/checkpoints/latest.ckpt',
+    'recovery_ckpt': '/home/georgegao/diffusion_policy_ood/data/outputs/2024.09.06/12.14.19_train_diffusion_unet_lowdim_obsact_square_lowdim/checkpoints/epoch=0750-train_action_mse_error=0.001.ckpt',
     'base_ckpt': "/home/georgegao/diffusion_policy_ood/data/outputs/2024.09.05/16.12.10_train_diffusion_unet_lowdim_square_lowdim_abs/checkpoints/epoch=0250-test_mean_score=0.960.ckpt",
 }
 

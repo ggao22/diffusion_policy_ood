@@ -142,12 +142,25 @@ def main(output_dir, device):
     base_cfg.task.dataset['dataset_path'] = '../' + base_cfg.task.dataset['dataset_path']
     dataset = h5py.File(base_cfg.task.dataset['dataset_path'],'r')
 
-    fig, ax = plt.subplots()
+    fig = plt.figure(figsize=(10,5))
+    ax1 = fig.add_subplot(1, 2, 1)
+    ax2 = fig.add_subplot(1, 2, 2, projection='3d')
+    fig_lims = 0.6
+
     def animate(args):
-        env_img, env_num = args
-        ax.cla()
-        ax.imshow(env_img)
-        ax.set_title(f"Env #{str(env_num)}")
+        env_img, kp, gripper, env_num = args
+        ax1.cla()
+        ax1.imshow(env_img)
+        ax1.set_title(f"Env #{str(env_num)}")
+
+        ax2.cla()
+        ax2.set_title(f"Gripper State: {str(gripper)}")
+        kp = kp.reshape(-1,3)
+        for i in range(len(kp)):
+            ax2.scatter(kp[i,0], kp[i,1], kp[i,2], color=plt.cm.rainbow(i/len(kp)), s=15)
+        ax2.set_xlim(-fig_lims, fig_lims)
+        ax2.set_ylim(-fig_lims, fig_lims)
+        ax2.set_zlim(-fig_lims, fig_lims)
 
     env = make_env(base_cfg)
 
@@ -169,15 +182,18 @@ def main(output_dir, device):
 
    
     env_imgs = []
-    max_iter = 50
+    max_iter = 30
     n_obs_steps = base_cfg.n_obs_steps
-    # envs_tested = [0,2,4,5,6]
-    envs_tested = list(range(10))
+    # envs_tested = [4,5]
+    envs_tested = list(range(20))
     np.random.seed(0)
     ood_offsets = np.random.uniform([-0.01,-0.35],[0.01,-0.20],(len(envs_tested),2))
     env_labels = []
     rewards = []
+    kp_vis = []
+    gripper_states = []
     OOD_THRESHOLD = 0.15
+    action_horizon = 12
     
 
     for k in range(len(envs_tested)):
@@ -206,6 +222,7 @@ def main(output_dir, device):
                 rec_vectors = rec_vectors.reshape(cur_kp.shape[1:])
                 kp_traj = generate_kp_traj(cur_kp[0], rec_vectors, horizon=16, delay=delay, alpha=0.0001) # H,n_kp,D_kp
                 if delay > 4: delay -= 1
+                else: gripper = 1
                 abs_kp = abs_traj(kp_traj, cur_obj_pose[0])
 
                 cur_quat = np.concatenate((obs[14+6:14+7], obs[14+3:14+6]))
@@ -239,9 +256,19 @@ def main(output_dir, device):
                                                 vec2rot6d.inverse(detrans_np_action[:,3:9]),
                                                 np_action[:,9:]))
                 
+                #for visualization
+                kp_traj = kp_traj[:action_horizon].reshape(-1,9)
+                rot = quat2mat.forward(detrans_np_action[:action_horizon,3:9])
+                pose = np.repeat(np.eye(4)[None],action_horizon,0)
+                pose[:,:3,:3] = rot
+                pose[:,:3,3] = detrans_np_action[:action_horizon,:3]
+                ee_kps = gen_keypoints(pose).reshape(action_horizon,-1)
+                kp = np.hstack((kp_traj,ee_kps))
+                kp_vis.append(kp)
+                
                 # step env and render
                 # detrans_np_action.shape[0]
-                for i in range(8):
+                for i in range(action_horizon):
                     act = detrans_np_action[i]
                     gripper = act[-1]
                     for _ in range(3):
@@ -251,6 +278,7 @@ def main(output_dir, device):
                     img = env.render(mode='rgb_array')
                     env_imgs.append(img)
                     env_labels.append(n)
+                    gripper_states.append(gripper)
 
             else:
                 ## Case: ID
@@ -286,9 +314,11 @@ def main(output_dir, device):
                     img = env.render(mode='rgb_array')
                     env_imgs.append(img)
                     env_labels.append(n)
+                    gripper_states.append(gripper)
 
                     if reward > 0.98: done = True
                     if done: break
+                kp_vis.append(np.zeros((i+1,18)))
                 if done: break
         rewards.append(reward)
         if done:
@@ -297,7 +327,8 @@ def main(output_dir, device):
             print(f'Env #{n} failed, max iter reached. Reward Managed {reward}')
 
     print(f"Test done, average reward {np.mean(rewards)}")
-    ani = FuncAnimation(fig, animate, frames=zip(env_imgs,env_labels), interval=100, save_count=sys.maxsize)
+    kp_vis = np.vstack((kp_vis))
+    ani = FuncAnimation(fig, animate, frames=zip(env_imgs,kp_vis,gripper_states,env_labels), interval=100, save_count=sys.maxsize)
     ani.save(os.path.join(output_dir,'combined_ood.mp4'), writer='ffmpeg', fps=10) 
     plt.show()
 
