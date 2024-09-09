@@ -17,9 +17,8 @@ from diffusion_policy.common.normalize_util import (
     get_identity_normalizer_from_stat,
     array_to_stats
 )
-from ood_3d.utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, abs_grad, deabs_se3_vector, panda_ee_obs_correction
+from ood_3d.utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, abs_grad, panda_ee_obs_correction
 
-from robosuite.utils.transform_utils import pose2mat
 
 class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
     def __init__(self,
@@ -41,6 +40,7 @@ class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
             from_rep='axis_angle', to_rep=rotation_rep)
 
         replay_buffer = ReplayBuffer.create_empty_numpy()
+        episodes = []
         with h5py.File(dataset_path) as file:
             demos = file['data']
             for i in tqdm(range(len(demos)), desc="Loading hdf5 to ReplayBuffer"):
@@ -52,7 +52,10 @@ class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
                     abs_action=abs_action,
                     rotation_transformer=rotation_transformer,
                     horizon=horizon)
-                replay_buffer.add_episode(episode)
+                episodes.append(episode)
+            # episodes = normalize_gradients(episodes)
+            for i in range(len(demos)):
+                replay_buffer.add_episode(episodes[i])
 
         val_mask = get_val_mask(
             n_episodes=replay_buffer.n_episodes, 
@@ -139,6 +142,20 @@ def normalizer_from_stat(stat):
         offset=offset,
         input_stats_dict=stat
     )
+
+def normalize_gradients(episodes):
+    max_norm = 0
+    for i in range(len(episodes)):
+        kp_gradient = episodes[i]['kp_gradient']
+        norm_kp_gradient = np.linalg.norm(kp_gradient, axis=1)
+        max_norm_kp_gradient = np.max(norm_kp_gradient, axis=0)
+        max_norm = max(max_norm_kp_gradient, max_norm)
+
+    for i in range(len(episodes)):
+        kp_gradient = episodes[i]['kp_gradient']
+        episodes[i]['kp_gradient'] = kp_gradient/max_norm
+    
+    return episodes
     
 def _data_to_obs(raw_obs, raw_actions, obs_keys, abs_action, rotation_transformer, horizon):
    
@@ -147,12 +164,8 @@ def _data_to_obs(raw_obs, raw_actions, obs_keys, abs_action, rotation_transforme
     ], axis=-1).astype(np.float32)
 
     # Correcting Quaternion
-    for t in range(len(obs)):
-        obs[t] = panda_ee_obs_correction(obs[t])
+    obs = panda_ee_obs_correction(obs)
     
-    # robot_in_world_frame = pose2mat((env.robots[0].base_pos, env.robots[0].base_ori))
-    # obs[:,14:14+7] = deabs_se3_vector(obs[:,14:14+7], robot_in_world_frame)
-
     # Take object first 9 dimensions only (7 actually used, 9 to fill array for keypoints)
     obs = np.concatenate([
         obs[:,:9], obs[:,14:]
@@ -221,19 +234,19 @@ def _get_kp_gradient_from_obs(obs,horizon):
 def _absolute_data(data):
     obj_pose = to_obj_pose(data['obs'][:,:7]) # H,4,4
     kp = gen_keypoints(obj_pose) # H,n_kp,D_kp
-    # abs_kp = abs_traj(kp, obj_pose[0]).reshape(-1,9)
-    # abs_ee = abs_se3_vector(data['obs'][:,7:14], obj_pose[0])
+    abs_kp = abs_traj(kp, obj_pose[0]).reshape(-1,9)
+    abs_ee = abs_se3_vector(data['obs'][:,9:16], obj_pose[0])
 
     #test
-    abs_kp = kp.reshape(-1,9)
-    abs_ee = data['obs'][:,7:14]
+    # abs_kp = kp.reshape(-1,9)
+    # abs_ee = data['obs'][:,9:16]
     data['obs'][:,:16] = np.concatenate([
         abs_kp, abs_ee
     ], axis=-1).astype(np.float32)
 
-    # kp_gradient = data['kp_gradient']
-    # data['kp_gradient'] = abs_grad(kp_gradient, obj_pose[0]).astype(np.float32)
+    kp_gradient = data['kp_gradient']
+    data['kp_gradient'] = abs_grad(kp_gradient, obj_pose[0]).astype(np.float32)
     
-    # data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], obj_pose[0]).astype(np.float32)
+    data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], obj_pose[0]).astype(np.float32)
     return data
 

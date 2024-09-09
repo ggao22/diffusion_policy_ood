@@ -219,14 +219,13 @@ def gen_keypoints(poses, est_obj_size=0.05):
 
 
 def panda_ee_obs_correction(obs):
+    assert len(obs.shape)==2
     quat2mat = RotationTransformer(from_rep='quaternion', to_rep='matrix')
     euler2mat = RotationTransformer(from_rep='euler_angles', from_convention='YXZ', to_rep='matrix')
-
-    # quat = np.concatenate((obs[14+6:14+7], obs[14+3:14+6]))
-    quat = obs[14+3:14+7]
+    quat = np.hstack((obs[:,14+6:14+7], obs[:,14+3:14+6]))
     mat_corrected = quat2mat.forward(quat) @ euler2mat.forward(np.array([0, 0, -np.pi/2]))
     quat_corrected = quat2mat.inverse(mat_corrected)
-    obs[14+3:14+7] = quat_corrected
+    obs[:,14+3:14+7] = quat_corrected
     return obs
 
 # data stats utils

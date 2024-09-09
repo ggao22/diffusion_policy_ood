@@ -32,7 +32,7 @@ import robomimic.utils.file_utils as FileUtils
 import robomimic.utils.env_utils as EnvUtils
 import robomimic.utils.obs_utils as ObsUtils
 
-from utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, deabs_se3_vector, abs_grad
+from utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, deabs_se3_vector, abs_grad, panda_ee_obs_correction
 
 from sklearn.mixture import GaussianMixture
 from models import GMMGradient
@@ -136,12 +136,12 @@ def main(checkpoint, output_dir, device):
 
     rec_iter = 15
     env_imgs = []
-    env_idx = 0
+    env_idx = 8
     for n in range(env_idx,env_idx+1):
         env.init_state = dataset[f'data/demo_{n}/states'][0]
         # i=10,11,12 is xyz of object
-        env.init_state[11] = env.init_state[11] - 0.3
-        env.init_state[10] = env.init_state[10] + 0.1
+        env.init_state[11] = env.init_state[11] - 0.2
+        env.init_state[10] = env.init_state[10] + 0.05
         obs = env.reset()
         img = env.render(mode='rgb_array')
 
@@ -149,6 +149,7 @@ def main(checkpoint, output_dir, device):
 
         # env policy control
         for i in range(rec_iter):
+            obs = panda_ee_obs_correction(obs[None])[0]
             cur_obj_pose = to_obj_pose(obs[:7][None])
             cur_kp = gen_keypoints(cur_obj_pose) # 1,n_kp,D_kp
 
@@ -188,7 +189,7 @@ def main(checkpoint, output_dir, device):
             # step env and render
             for i in range(detrans_np_action.shape[0]):
                 act = detrans_np_action[i]
-                for _ in range(3):
+                for _ in range(1):
                     # step env and render
                     obs, reward, done, info = env.step(act)
                 img = env.render(mode='rgb_array')
