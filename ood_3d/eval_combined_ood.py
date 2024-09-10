@@ -31,6 +31,8 @@ from diffusion_policy.env.robomimic.robomimic_lowdim_wrapper import RobomimicLow
 import robomimic.utils.file_utils as FileUtils
 import robomimic.utils.env_utils as EnvUtils
 import robomimic.utils.obs_utils as ObsUtils
+from robosuite.utils.transform_utils import pose2mat
+from camera_utils import get_camera_transform_matrix, project_points_from_world_to_camera
 
 from utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, deabs_se3_vector
 
@@ -38,6 +40,66 @@ from sklearn.mixture import GaussianMixture
 from models import GMMGradient
 from config import cfg as rec_cfg
 from config import combined_policy_cfg
+
+def draw_frame_axis_to_2d(T, ax, world_to_pixel, color, length=0.05, alpha=1.0):
+    if ax is None:
+        return
+    
+    x_axis = T_multi_vec(T, np.array([length,    0,    0]))
+    y_axis = T_multi_vec(T, np.array([0,    length,    0]))
+    z_axis = T_multi_vec(T, np.array([0,    0,    length]))
+
+    center = T_multi_vec(T, np.array([0.0, 0.0, 0.0]))
+    stack_x = np.vstack((center, x_axis))
+    stack_y = np.vstack((center, y_axis))
+    stack_z = np.vstack((center, z_axis))
+
+    stack_x = project_points_from_world_to_camera(stack_x, 
+                                        world_to_camera_transform=world_to_pixel, 
+                                        camera_height=256, 
+                                        camera_width=256)
+    
+    stack_y = project_points_from_world_to_camera(stack_y, 
+                                        world_to_camera_transform=world_to_pixel, 
+                                        camera_height=256, 
+                                        camera_width=256)
+    
+    stack_z = project_points_from_world_to_camera(stack_z, 
+                                        world_to_camera_transform=world_to_pixel, 
+                                        camera_height=256, 
+                                        camera_width=256)
+
+    ax.plot(stack_x[:,1], stack_x[:,0], color=color, alpha=alpha)
+    ax.plot(stack_y[:,1], stack_y[:,0], color=color, alpha=alpha)
+    ax.plot(stack_z[:,1], stack_z[:,0], color=color, alpha=alpha)
+
+def draw_frame_axis(T, ax, color, length=0.05, alpha=1.0):
+    if ax is None:
+        return
+    
+    x_axis = T_multi_vec(T, np.array([length,    0,    0]))
+    y_axis = T_multi_vec(T, np.array([0,    length,    0]))
+    z_axis = T_multi_vec(T, np.array([0,    0,    length]))
+
+    center = T_multi_vec(T, np.array([0.0, 0.0, 0.0]))
+    stack_x = np.vstack((center, x_axis))
+    stack_y = np.vstack((center, y_axis))
+    stack_z = np.vstack((center, z_axis))
+
+    ax.plot(stack_x[:,0], stack_x[:,1], stack_x[:,2], color=color, alpha=alpha)
+    ax.plot(stack_y[:,0], stack_y[:,1], stack_y[:,2], color=color, alpha=alpha)
+    ax.plot(stack_z[:,0], stack_z[:,1], stack_z[:,2], color=color, alpha=alpha)
+
+def T_multi_vec(T, vec):
+    vec = vec.flatten()
+    return (T @ np.append(vec, 1.0).reshape(-1,1)).flatten()[:3]
+
+def plot_pose(pose, dense=False):
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+    ax.set_aspect('equal')
+    draw_frame_axis(pose, ax, 'green', 0.08)
+    plt.show()
 
 
 def load_policy(ckpt, device, output_dir):
@@ -142,27 +204,40 @@ def main(output_dir, device):
     base_cfg.task.dataset['dataset_path'] = '../' + base_cfg.task.dataset['dataset_path']
     dataset = h5py.File(base_cfg.task.dataset['dataset_path'],'r')
 
+    env = make_env(base_cfg)
+    camera_transform_matrix = get_camera_transform_matrix(sim=env.env.env.sim, 
+                                                          camera_name='agentview', 
+                                                          camera_height=256, 
+                                                          camera_width=256)
+
     fig = plt.figure(figsize=(10,5))
     ax1 = fig.add_subplot(1, 2, 1)
-    ax2 = fig.add_subplot(1, 2, 2, projection='3d')
+    # ax2 = fig.add_subplot(1, 2, 2, projection='3d')
     fig_lims = 0.6
 
     def animate(args):
-        env_img, kp, gripper, env_num = args
+        env_img, kp, gripper, env_num, pose = args
+        kp = kp.reshape(-1,3)
+
         ax1.cla()
         ax1.imshow(env_img)
         ax1.set_title(f"Env #{str(env_num)}")
+        cam_kp = project_points_from_world_to_camera(kp, 
+                                                     world_to_camera_transform=camera_transform_matrix, 
+                                                     camera_height=256, 
+                                                     camera_width=256)
+        for i in range(len(cam_kp)):
+            ax1.scatter(cam_kp[i,1], cam_kp[i,0], color=plt.cm.rainbow(i/len(cam_kp)), s=15)
+        draw_frame_axis_to_2d(pose, ax1, camera_transform_matrix, color=plt.cm.rainbow(1), length=0.1, alpha=1.0)
 
-        ax2.cla()
-        ax2.set_title(f"Gripper State: {str(gripper)}")
-        kp = kp.reshape(-1,3)
-        for i in range(len(kp)):
-            ax2.scatter(kp[i,0], kp[i,1], kp[i,2], color=plt.cm.rainbow(i/len(kp)), s=15)
-        ax2.set_xlim(-fig_lims, fig_lims)
-        ax2.set_ylim(-fig_lims, fig_lims)
-        ax2.set_zlim(-fig_lims, fig_lims)
+        # ax2.cla()
+        # ax2.set_title(f"Gripper State: {str(gripper)}")
+        # for i in range(len(kp)):
+        #     ax2.scatter(kp[i,0], kp[i,1], kp[i,2], color=plt.cm.rainbow(i/len(kp)), s=15)
+        # ax2.set_xlim(-fig_lims, fig_lims)
+        # ax2.set_ylim(-fig_lims, fig_lims)
+        # ax2.set_zlim(-fig_lims, fig_lims)
 
-    env = make_env(base_cfg)
 
     vec2rot6d = RotationTransformer(from_rep='axis_angle', to_rep='rotation_6d')
     quat2mat = RotationTransformer(from_rep='quaternion', to_rep='matrix')
@@ -182,15 +257,16 @@ def main(output_dir, device):
 
    
     env_imgs = []
-    max_iter = 30
+    max_iter = 5
     n_obs_steps = base_cfg.n_obs_steps
     # envs_tested = [4,5]
-    envs_tested = list(range(20))
+    envs_tested = list(range(2))
     np.random.seed(0)
     ood_offsets = np.random.uniform([-0.01,-0.35],[0.01,-0.20],(len(envs_tested),2))
     env_labels = []
     rewards = []
     kp_vis = []
+    poses = []
     gripper_states = []
     OOD_THRESHOLD = 0.15
     action_horizon = 12
@@ -279,6 +355,8 @@ def main(output_dir, device):
                     env_imgs.append(img)
                     env_labels.append(n)
                     gripper_states.append(gripper)
+                    poses.append(to_obj_pose(obs[:7][None])[0])
+                    # kp_vis.append(kp)
 
             else:
                 ## Case: ID
@@ -315,6 +393,7 @@ def main(output_dir, device):
                     env_imgs.append(img)
                     env_labels.append(n)
                     gripper_states.append(gripper)
+                    poses.append(to_obj_pose(obs[:7][None])[0])
 
                     if reward > 0.98: done = True
                     if done: break
@@ -328,7 +407,7 @@ def main(output_dir, device):
 
     print(f"Test done, average reward {np.mean(rewards)}")
     kp_vis = np.vstack((kp_vis))
-    ani = FuncAnimation(fig, animate, frames=zip(env_imgs,kp_vis,gripper_states,env_labels), interval=100, save_count=sys.maxsize)
+    ani = FuncAnimation(fig, animate, frames=zip(env_imgs,kp_vis,gripper_states,env_labels,poses), interval=100, save_count=sys.maxsize)
     ani.save(os.path.join(output_dir,'combined_ood.mp4'), writer='ffmpeg', fps=10) 
     plt.show()
 

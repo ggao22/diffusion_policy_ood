@@ -196,12 +196,15 @@ def robosuite_data_to_obj_dataset(data):
 
 def to_obj_pose(object_dataset):
     rotation_transformer = RotationTransformer(from_rep='quaternion', to_rep='matrix')
-    object_rotation = rotation_transformer.forward(object_dataset[:,3:7]) # obj dim: [nut_pos, nut_quat, nut_to_eef_pos, nut_to_eef_quat]
+    inds = np.array([3, 0, 1, 2])
+    object_rotation = rotation_transformer.forward(object_dataset[:,3:7][:,inds]) # obj dim: [nut_pos, nut_quat, nut_to_eef_pos, nut_to_eef_quat]
     object_pos = object_dataset[:,:3]
 
-    object_pos = np.expand_dims(object_pos,2)
-    partial_pose = np.concatenate((object_rotation,object_pos),2)
-    object_pose = np.concatenate((partial_pose, np.repeat([[[0,0,0,1]]],partial_pose.shape[0],0)),1)
+    object_pose = np.zeros((object_dataset.shape[0],4,4))
+    object_pose[:,:3,:3] = object_rotation
+    object_pose[:,:3,3] = object_pos
+    object_pose[:,3,3] = 1
+    
     return object_pose
 
 
