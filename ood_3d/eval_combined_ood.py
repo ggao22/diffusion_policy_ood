@@ -34,7 +34,7 @@ import robomimic.utils.obs_utils as ObsUtils
 from robosuite.utils.transform_utils import pose2mat
 from camera_utils import get_camera_transform_matrix, project_points_from_world_to_camera
 
-from utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, deabs_se3_vector
+from utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, deabs_se3_vector, obs_quat_to_rot6d, quat_correction
 
 from sklearn.mixture import GaussianMixture
 from models import GMMGradient
@@ -210,13 +210,13 @@ def main(output_dir, device):
                                                           camera_height=256, 
                                                           camera_width=256)
 
-    fig = plt.figure(figsize=(10,5))
-    ax1 = fig.add_subplot(1, 2, 1)
+    fig = plt.figure(figsize=(5,5))
+    ax1 = fig.add_subplot(1, 1, 1)
     # ax2 = fig.add_subplot(1, 2, 2, projection='3d')
     fig_lims = 0.6
 
     def animate(args):
-        env_img, kp, gripper, env_num, pose = args
+        env_img, kp, gripper, env_num, poses = args
         kp = kp.reshape(-1,3)
 
         ax1.cla()
@@ -228,7 +228,9 @@ def main(output_dir, device):
                                                      camera_width=256)
         for i in range(len(cam_kp)):
             ax1.scatter(cam_kp[i,1], cam_kp[i,0], color=plt.cm.rainbow(i/len(cam_kp)), s=15)
-        draw_frame_axis_to_2d(pose, ax1, camera_transform_matrix, color=plt.cm.rainbow(1), length=0.1, alpha=1.0)
+
+        for pose in poses:
+            draw_frame_axis_to_2d(pose, ax1, camera_transform_matrix, color=plt.cm.rainbow(1), length=0.1, alpha=1.0)
 
         # ax2.cla()
         # ax2.set_title(f"Gripper State: {str(gripper)}")
@@ -241,8 +243,8 @@ def main(output_dir, device):
 
     vec2rot6d = RotationTransformer(from_rep='axis_angle', to_rep='rotation_6d')
     quat2mat = RotationTransformer(from_rep='quaternion', to_rep='matrix')
-    mat2rot6d = RotationTransformer(from_rep='matrix', to_rep='rotation_6d')
-    euler2mat = RotationTransformer(from_rep='euler_angles', from_convention='YXZ', to_rep='matrix')
+    quat2rot6d = RotationTransformer(from_rep='quaternion', to_rep='rotation_6d')
+    vec2mat = RotationTransformer(from_rep='axis_angle', to_rep='matrix')
 
     gmms = []
     for i in range(3):
@@ -257,10 +259,10 @@ def main(output_dir, device):
 
    
     env_imgs = []
-    max_iter = 5
+    max_iter = 30
     n_obs_steps = base_cfg.n_obs_steps
     # envs_tested = [4,5]
-    envs_tested = list(range(2))
+    envs_tested = list(range(10))
     np.random.seed(0)
     ood_offsets = np.random.uniform([-0.01,-0.35],[0.01,-0.20],(len(envs_tested),2))
     env_labels = []
@@ -268,7 +270,7 @@ def main(output_dir, device):
     kp_vis = []
     poses = []
     gripper_states = []
-    OOD_THRESHOLD = 0.15
+    OOD_THRESHOLD = 0.40
     action_horizon = 12
     
 
@@ -291,7 +293,7 @@ def main(output_dir, device):
             cur_obj_pose = to_obj_pose(obs[:7][None])
             cur_kp = gen_keypoints(cur_obj_pose) # 1,n_kp,D_kp
             densities, rec_vectors = rec_policy(cur_kp)
-            # print(np.mean(densities))
+            print(np.mean(densities))
             
             if np.mean(densities) < OOD_THRESHOLD:
                 ### Case: ODD
@@ -301,11 +303,8 @@ def main(output_dir, device):
                 else: gripper = 1
                 abs_kp = abs_traj(kp_traj, cur_obj_pose[0])
 
-                cur_quat = np.concatenate((obs[14+6:14+7], obs[14+3:14+6]))
-                cur_mat_corrected = quat2mat.forward(cur_quat) @ euler2mat.forward(np.array([0, 0, -np.pi/2]))
-                cur_rot6d_corrected = mat2rot6d.forward(cur_mat_corrected)
-                cur_se3 = np.concatenate((obs[14:14+3], cur_rot6d_corrected))[None]
-                # gripper = -1 if sum(np.abs(obs[-2:]))/2 > 0.018 else 1
+                cur_rot6d = obs_quat_to_rot6d(obs[14+3:14+7])
+                cur_se3 = np.concatenate((obs[14:14+3], cur_rot6d))[None]
                 cur_action = np.hstack((abs_se3_vector(cur_se3, cur_obj_pose[0]), np.array([[gripper]])))
 
                 np_obs_dict = {
@@ -331,12 +330,12 @@ def main(output_dir, device):
                 detrans_np_action = np.hstack((detrans_np_action[:,:3], 
                                                 vec2rot6d.inverse(detrans_np_action[:,3:9]),
                                                 np_action[:,9:]))
-                
+
                 #for visualization
                 kp_traj = kp_traj[:action_horizon].reshape(-1,9)
-                rot = quat2mat.forward(detrans_np_action[:action_horizon,3:9])
+                mat = vec2mat.forward(detrans_np_action[:action_horizon,3:6])
                 pose = np.repeat(np.eye(4)[None],action_horizon,0)
-                pose[:,:3,:3] = rot
+                pose[:,:3,:3] = mat
                 pose[:,:3,3] = detrans_np_action[:action_horizon,:3]
                 ee_kps = gen_keypoints(pose).reshape(action_horizon,-1)
                 kp = np.hstack((kp_traj,ee_kps))
@@ -355,8 +354,10 @@ def main(output_dir, device):
                     env_imgs.append(img)
                     env_labels.append(n)
                     gripper_states.append(gripper)
-                    poses.append(to_obj_pose(obs[:7][None])[0])
-                    # kp_vis.append(kp)
+                    poses.append(
+                        [to_obj_pose(obs[:7][None])[0], 
+                         to_obj_pose(np.concatenate((obs[14:14+3], 
+                                                     quat_correction(obs[14+3:14+7])))[None])[0]])
 
             else:
                 ## Case: ID
@@ -393,8 +394,11 @@ def main(output_dir, device):
                     env_imgs.append(img)
                     env_labels.append(n)
                     gripper_states.append(gripper)
-                    poses.append(to_obj_pose(obs[:7][None])[0])
-
+                    poses.append(
+                        [to_obj_pose(obs[:7][None])[0], 
+                         to_obj_pose(np.concatenate((obs[14:14+3], 
+                                                     quat_correction(obs[14+3:14+7])))[None])[0]])
+                    
                     if reward > 0.98: done = True
                     if done: break
                 kp_vis.append(np.zeros((i+1,18)))

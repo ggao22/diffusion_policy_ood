@@ -9,6 +9,8 @@ from torchvision import transforms
 import scipy
 
 from diffusion_policy.model.common.rotation_transformer import RotationTransformer
+from robosuite.utils.transform_utils import quat2mat, euler2mat, mat2quat
+
 
 # plotting
 azim = 50
@@ -195,8 +197,8 @@ def robosuite_data_to_obj_dataset(data):
     return object_dataset
 
 def to_obj_pose(object_dataset):
-    rotation_transformer = RotationTransformer(from_rep='quaternion', to_rep='matrix')
     inds = np.array([3, 0, 1, 2])
+    rotation_transformer = RotationTransformer(from_rep='quaternion', to_rep='matrix')
     object_rotation = rotation_transformer.forward(object_dataset[:,3:7][:,inds]) # obj dim: [nut_pos, nut_quat, nut_to_eef_pos, nut_to_eef_quat]
     object_pos = object_dataset[:,:3]
 
@@ -206,6 +208,17 @@ def to_obj_pose(object_dataset):
     object_pose[:,3,3] = 1
     
     return object_pose
+
+def obs_quat_to_rot6d(quat):
+    mat2rot6d = RotationTransformer(from_rep='matrix', to_rep='rotation_6d')
+    mat_rotated = quat2mat(quat) @ euler2mat(np.array([0, 0, -np.pi/2]))
+    rot6d_corrected = mat2rot6d.forward(mat_rotated)
+    return rot6d_corrected
+
+def quat_correction(quat):
+    mat_rotated = quat2mat(quat) @ euler2mat(np.array([0, 0, -np.pi/2]))
+    quat_corrected = mat2quat(mat_rotated)
+    return quat_corrected
 
 
 # kp generation from pose

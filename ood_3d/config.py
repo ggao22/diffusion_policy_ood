@@ -9,6 +9,7 @@ cfg = {
         
         # testing cfgs
         'testing_dir': '/home/georgegao/diffusion_policy_ood/ood_3d/output/square/low_dim_abs/08-27-2024_17-14-47',
+        # 'testing_dir': '/home/georgegao/diffusion_policy_ood/ood_3d/output/square/low_dim_abs/09-06-2024_13-38-08',
         'n_pts_tested': 100,
 
         # # rec cfg
@@ -25,7 +26,7 @@ cfg["datapath"] = f'/home/georgegao/diffusion_policy_ood/data/robomimic/datasets
 combined_policy_cfg = {
     # best yet
     # 'recovery_ckpt': '/home/georgegao/diffusion_policy_ood/data/outputs/2024.09.05/18.57.19_train_diffusion_unet_lowdim_obsact_square_lowdim/checkpoints/latest.ckpt',
-    'recovery_ckpt': '/home/georgegao/diffusion_policy_ood/data/outputs/2024.09.06/12.14.19_train_diffusion_unet_lowdim_obsact_square_lowdim/checkpoints/epoch=0750-train_action_mse_error=0.001.ckpt',
+    'recovery_ckpt': '/home/georgegao/diffusion_policy_ood/data/outputs/2024.09.11/08.56.33_train_diffusion_unet_lowdim_obsact_square_lowdim/checkpoints/epoch=0400-train_action_mse_error=0.003.ckpt',
     'base_ckpt': "/home/georgegao/diffusion_policy_ood/data/outputs/2024.09.05/16.12.10_train_diffusion_unet_lowdim_square_lowdim_abs/checkpoints/epoch=0250-test_mean_score=0.960.ckpt",
 }
 
