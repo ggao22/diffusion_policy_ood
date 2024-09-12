@@ -186,6 +186,21 @@ def generate_kp_traj(kp_start, recovery_vec, horizon, delay, alpha=0.01):
     vecs = np.repeat(np.cumsum(motion_vecs, axis=0), n_kp, axis=0).reshape(horizon, n_kp, d_kp)
     return kp_base + vecs
 
+def generate_recovery_kp_traj(obs, rec_policy, horizon, delay, alpha=0.01, random_walk=0.0):
+    cur_obj_pose = to_obj_pose(obs[:7][None])
+    cur_kp = gen_keypoints(cur_obj_pose) # 1,n_kp,D_kp
+    kp_base = np.repeat(cur_kp, horizon, axis=0) # horizon,n_kp,D_kp
+    _,n_kp,d_kp = cur_kp.shape
+
+    kp_motion = np.zeros((delay, d_kp))
+    for i in range(horizon-delay):
+        densities, rec_vectors = rec_policy(cur_kp)
+        rec_vectors = rec_vectors.reshape(cur_kp.shape[1:])
+        kp_inc = rec_vectors.mean(axis=0) * alpha + np.random.randn(3)*random_walk
+        kp_motion = np.vstack((kp_motion,[kp_inc]))
+        cur_kp[0] = cur_kp[0] + np.repeat([kp_inc],3,0)
+    kp_motion = np.repeat(np.cumsum(kp_motion, axis=0), n_kp, axis=0).reshape(horizon, n_kp, d_kp)
+    return kp_base + kp_motion
 
 
 @click.command()
@@ -212,13 +227,9 @@ def main(output_dir, device):
 
     fig = plt.figure(figsize=(5,5))
     ax1 = fig.add_subplot(1, 1, 1)
-    # ax2 = fig.add_subplot(1, 2, 2, projection='3d')
-    fig_lims = 0.6
-
     def animate(args):
         env_img, kp, gripper, env_num, poses = args
         kp = kp.reshape(-1,3)
-
         ax1.cla()
         ax1.imshow(env_img)
         ax1.set_title(f"Env #{str(env_num)}")
@@ -228,17 +239,8 @@ def main(output_dir, device):
                                                      camera_width=256)
         for i in range(len(cam_kp)):
             ax1.scatter(cam_kp[i,1], cam_kp[i,0], color=plt.cm.rainbow(i/len(cam_kp)), s=15)
-
         for pose in poses:
             draw_frame_axis_to_2d(pose, ax1, camera_transform_matrix, color=plt.cm.rainbow(1), length=0.1, alpha=1.0)
-
-        # ax2.cla()
-        # ax2.set_title(f"Gripper State: {str(gripper)}")
-        # for i in range(len(kp)):
-        #     ax2.scatter(kp[i,0], kp[i,1], kp[i,2], color=plt.cm.rainbow(i/len(kp)), s=15)
-        # ax2.set_xlim(-fig_lims, fig_lims)
-        # ax2.set_ylim(-fig_lims, fig_lims)
-        # ax2.set_zlim(-fig_lims, fig_lims)
 
 
     vec2rot6d = RotationTransformer(from_rep='axis_angle', to_rep='rotation_6d')
@@ -259,11 +261,11 @@ def main(output_dir, device):
 
    
     env_imgs = []
-    max_iter = 30
+    max_iter = 35
     n_obs_steps = base_cfg.n_obs_steps
     # envs_tested = [4,5]
-    envs_tested = list(range(10))
-    np.random.seed(0)
+    envs_tested = list(range(20))
+    np.random.seed(3501000)
     ood_offsets = np.random.uniform([-0.01,-0.35],[0.01,-0.20],(len(envs_tested),2))
     env_labels = []
     rewards = []
@@ -289,7 +291,7 @@ def main(output_dir, device):
 
         # env policy control
         for iter in range(max_iter):
-
+            
             cur_obj_pose = to_obj_pose(obs[:7][None])
             cur_kp = gen_keypoints(cur_obj_pose) # 1,n_kp,D_kp
             densities, rec_vectors = rec_policy(cur_kp)
@@ -297,8 +299,9 @@ def main(output_dir, device):
             
             if np.mean(densities) < OOD_THRESHOLD:
                 ### Case: ODD
-                rec_vectors = rec_vectors.reshape(cur_kp.shape[1:])
-                kp_traj = generate_kp_traj(cur_kp[0], rec_vectors, horizon=16, delay=delay, alpha=0.0001) # H,n_kp,D_kp
+                # rec_vectors = rec_vectors.reshape(cur_kp.shape[1:])
+                # kp_traj = generate_kp_traj(cur_kp[0], rec_vectors, horizon=16, delay=delay, alpha=0.0001) # H,n_kp,D_kp
+                kp_traj = generate_recovery_kp_traj(obs, rec_policy, horizon=16, delay=delay, alpha=0.00005, random_walk=0.008)
                 if delay > 0: delay -= 1
                 abs_kp = abs_traj(kp_traj, cur_obj_pose[0])
 
@@ -411,7 +414,7 @@ def main(output_dir, device):
     print(f"Test done, average reward {np.mean(rewards)}")
     kp_vis = np.vstack((kp_vis))
     ani = FuncAnimation(fig, animate, frames=zip(env_imgs,kp_vis,gripper_states,env_labels,poses), interval=100, save_count=sys.maxsize)
-    ani.save(os.path.join(output_dir,'combined_ood.mp4'), writer='ffmpeg', fps=10) 
+    ani.save(os.path.join(output_dir,'combined_ood_descent.mp4'), writer='ffmpeg', fps=10) 
     plt.show()
 
 
