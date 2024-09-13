@@ -17,7 +17,7 @@ from diffusion_policy.common.normalize_util import (
     get_identity_normalizer_from_stat,
     array_to_stats
 )
-from ood_3d.utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, abs_grad, panda_ee_obs_correction
+from ood_3d.utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, abs_grad, ee_quat_correction
 
 
 class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
@@ -164,7 +164,7 @@ def _data_to_obs(raw_obs, raw_actions, obs_keys, abs_action, rotation_transforme
     ], axis=-1).astype(np.float32)
 
     # Correcting Quaternion
-    obs = panda_ee_obs_correction(obs)
+    obs[:,14+3:14+7] = ee_quat_correction(obs[:,14+3:14+7])
     
     # Take object first 9 dimensions only (7 actually used, 9 to fill array for keypoints)
     obs = np.concatenate([

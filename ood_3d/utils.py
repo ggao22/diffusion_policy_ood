@@ -192,7 +192,7 @@ def robosuite_data_to_obj_dataset(data):
 
 def to_obj_pose(object_dataset):
     rotation_transformer = RotationTransformer(from_rep='quaternion', to_rep='matrix')
-    object_rotation = rotation_transformer.forward(object_dataset[:,3:7]) # obj dim: [nut_pos, nut_quat, nut_to_eef_pos, nut_to_eef_quat]
+    object_rotation = rotation_transformer.forward(object_quat_correction(object_dataset[:,3:7])) # obj dim: [nut_pos, nut_quat, nut_to_eef_pos, nut_to_eef_quat]
     object_pos = object_dataset[:,:3]
 
     object_pos = np.expand_dims(object_pos,2)
@@ -216,17 +216,22 @@ def gen_keypoints(poses, est_obj_size=0.05):
 
     return np.array(keypoints)
 
-
-
-def panda_ee_obs_correction(obs):
-    assert len(obs.shape)==2
+def ee_quat_correction(quat):
+    inds = np.array([3, 0, 1, 2])
     quat2mat = RotationTransformer(from_rep='quaternion', to_rep='matrix')
     euler2mat = RotationTransformer(from_rep='euler_angles', from_convention='YXZ', to_rep='matrix')
-    quat = np.hstack((obs[:,14+6:14+7], obs[:,14+3:14+6]))
-    mat_corrected = quat2mat.forward(quat) @ euler2mat.forward(np.array([0, 0, -np.pi/2]))
+    org_shape = quat.shape
+    quat = quat.reshape(-1,4)
+    mat_corrected = quat2mat.forward(quat[:,inds]) @ euler2mat.forward(np.array([0, 0, -np.pi/2]))
     quat_corrected = quat2mat.inverse(mat_corrected)
-    obs[:,14+3:14+7] = quat_corrected
-    return obs
+    return quat_corrected.reshape(org_shape)
+
+def object_quat_correction(quat):
+    inds = np.array([3, 0, 1, 2])
+    org_shape = quat.shape
+    quat = quat.reshape(-1,4)
+    return quat[:,inds].reshape(org_shape)
+
 
 # data stats utils
 def get_data_stats(data):

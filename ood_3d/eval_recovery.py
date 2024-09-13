@@ -149,7 +149,8 @@ def main(checkpoint, output_dir, device):
 
         # env policy control
         for i in range(rec_iter):
-            obs = panda_ee_obs_correction(obs[None])[0]
+            # correcting ee quat
+            obs[14+3:14+7] = ee_quat_correction(obs[14+3:14+7])
             cur_obj_pose = to_obj_pose(obs[:7][None])
             cur_kp = gen_keypoints(cur_obj_pose) # 1,n_kp,D_kp
 
@@ -161,7 +162,6 @@ def main(checkpoint, output_dir, device):
             rec_vec = rec_vectors.reshape(cur_kp.shape[1:]).mean(axis=0)
             norm_rec_vec = rec_vec/np.linalg.norm(rec_vec)
             abs_norm_rec_vec = abs_grad(norm_rec_vec, cur_obj_pose[0])
-            print(abs_norm_rec_vec)
 
             np_obs_dict = {
                 'obs': obs[None][None].astype(np.float32),
