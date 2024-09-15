@@ -196,18 +196,46 @@ def robosuite_data_to_obj_dataset(data):
     object_dataset = np.vstack((object_dataset)) # N,D
     return object_dataset
 
-def to_obj_pose(object_dataset):
-    inds = np.array([3, 0, 1, 2])
+def to_obj_pose(object_obs):
     rotation_transformer = RotationTransformer(from_rep='quaternion', to_rep='matrix')
-    object_rotation = rotation_transformer.forward(object_dataset[:,3:7][:,inds]) # obj dim: [nut_pos, nut_quat, nut_to_eef_pos, nut_to_eef_quat]
-    object_pos = object_dataset[:,:3]
+    object_rotation = rotation_transformer.forward(object_quat_correction(object_obs[:,3:7])) # obj dim: [nut_pos, nut_quat, nut_to_eef_pos, nut_to_eef_quat]
+    object_pos = object_obs[:,:3]
 
-    object_pose = np.zeros((object_dataset.shape[0],4,4))
+    object_pos = np.expand_dims(object_pos,2)
+    partial_pose = np.concatenate((object_rotation,object_pos),2)
+    object_pose = np.concatenate((partial_pose, np.repeat([[[0,0,0,1]]],partial_pose.shape[0],0)),1)
+    return object_pose
+
+def to_ee_pose(ee_obs):
+    assert ee_obs.shape[-1] == 7
+    rotation_transformer = RotationTransformer(from_rep='quaternion', to_rep='matrix')
+    object_rotation = rotation_transformer.forward(ee_quat_correction(ee_obs[:,3:7])) # obj dim: [nut_pos, nut_quat, nut_to_eef_pos, nut_to_eef_quat]
+    object_pos = ee_obs[:,:3]
+
+    object_pose = np.zeros((ee_obs.shape[0],4,4))
     object_pose[:,:3,:3] = object_rotation
     object_pose[:,:3,3] = object_pos
     object_pose[:,3,3] = 1
     
     return object_pose
+
+def ee_quat_correction(quat):
+    inds = np.array([3, 0, 1, 2])
+    quat2mat = RotationTransformer(from_rep='quaternion', to_rep='matrix')
+    euler2mat = RotationTransformer(from_rep='euler_angles', from_convention='YXZ', to_rep='matrix')
+    org_shape = quat.shape
+    quat = quat.reshape(-1,4)
+    mat_corrected = quat2mat.forward(quat[:,inds]) @ euler2mat.forward(np.array([0, 0, -np.pi/2]))
+    quat_corrected = quat2mat.inverse(mat_corrected)
+    return quat_corrected.reshape(org_shape)
+
+def object_quat_correction(quat):
+    inds = np.array([3, 0, 1, 2])
+    org_shape = quat.shape
+    quat = quat.reshape(-1,4)
+    return quat[:,inds].reshape(org_shape)
+
+
 
 def obs_quat_to_rot6d(quat):
     mat2rot6d = RotationTransformer(from_rep='matrix', to_rep='rotation_6d')
@@ -222,7 +250,7 @@ def quat_correction(quat):
 
 
 # kp generation from pose
-def gen_keypoints(poses, est_obj_size=0.05):
+def gen_keypoints(poses, est_obj_size=0.05, shuffle=False):
     keypoints = []
     for pose in poses:
         t = pose[:3,3]
@@ -232,6 +260,8 @@ def gen_keypoints(poses, est_obj_size=0.05):
         for i in range(3):
             kp = R[:3,i] * est_obj_size + t
             kp_t.append(kp)
+        kp_t = np.array(kp_t)
+        if shuffle: np.random.shuffle(kp_t)
         keypoints.append(kp_t)
 
     return np.array(keypoints)

@@ -17,7 +17,7 @@ from diffusion_policy.common.normalize_util import (
     get_identity_normalizer_from_stat,
     array_to_stats
 )
-from ood_3d.utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, deabs_se3_vector
+from ood_3d.utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, to_ee_pose
 
 class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
     def __init__(self,
@@ -25,8 +25,7 @@ class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
             horizon=1,
             pad_before=0,
             pad_after=0,
-            obs_keys: List[str]=[
-                'object'],
+            obs_keys: List[str]=['object', 'robot0_eef_pos', 'robot0_eef_quat', 'robot0_gripper_qpos'],
             abs_action=False,
             rotation_rep='rotation_6d',
             use_legacy_normalizer=False,
@@ -145,7 +144,9 @@ def _data_to_obs(raw_obs, raw_actions, obs_keys, abs_action, rotation_transforme
 
     # HARD CODING
     # Setting object obs array length from 14 to 9, to fit the keypoint array length
-    obs = obs[:,:9]
+    obs = np.concatenate([
+        obs[:,:9], obs[:,14:]
+    ], axis=-1).astype(np.float32)
     
 
     if abs_action:
@@ -186,13 +187,13 @@ def _get_full_obsact_dict(sampler):
     return datadict
 
 def _absolute_data(data):
-    obj_pose = to_obj_pose(data['obs']) # H,4,4
-    kp = gen_keypoints(obj_pose) # H,n_kp,D_kp
-    abs_kp = abs_traj(kp, obj_pose[0])
+    obj_pose = to_obj_pose(data['obs'][:,:7]) # H,4,4
+    ee_pose = to_ee_pose(data['obs'][:,9:16]) # H,4,4
+
+    kp = gen_keypoints(obj_pose, shuffle=True) # H,n_kp,D_kp
+    abs_kp = abs_traj(kp, ee_pose[0])
     data['obs'] = abs_kp.reshape(-1,9)
-    # data['obs'] = kp.reshape(-1,9)
     
-    data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], obj_pose[0])
-    # data['action'][...,:9] = deabs_se3_vector(data['action'][...,:9], obj_pose[0])
+    data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], ee_pose[0])
     return data
 

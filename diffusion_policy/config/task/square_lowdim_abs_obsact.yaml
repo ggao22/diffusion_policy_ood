@@ -4,7 +4,7 @@ obs_dim: 9
 action_dim: 10
 keypoint_dim: 3
 
-obs_keys: &obs_keys ['object']
+obs_keys: &obs_keys ['object', 'robot0_eef_pos', 'robot0_eef_quat', 'robot0_gripper_qpos']
 task_name: &task_name square
 dataset_type: &dataset_type ph
 abs_action: &abs_action True

@@ -34,7 +34,7 @@ import robomimic.utils.obs_utils as ObsUtils
 from robosuite.utils.transform_utils import pose2mat
 from camera_utils import get_camera_transform_matrix, project_points_from_world_to_camera
 
-from utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, deabs_se3_vector, obs_quat_to_rot6d, quat_correction
+from utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, deabs_se3_vector, obs_quat_to_rot6d, quat_correction, to_ee_pose
 
 from sklearn.mixture import GaussianMixture
 from models import GMMGradient
@@ -259,10 +259,10 @@ def main(output_dir, device):
 
    
     env_imgs = []
-    max_iter = 30
+    max_iter = 15
     n_obs_steps = base_cfg.n_obs_steps
     # envs_tested = [4,5]
-    envs_tested = list(range(10))
+    envs_tested = list(range(1))
     np.random.seed(0)
     ood_offsets = np.random.uniform([-0.01,-0.35],[0.01,-0.20],(len(envs_tested),2))
     env_labels = []
@@ -291,6 +291,7 @@ def main(output_dir, device):
         for iter in range(max_iter):
 
             cur_obj_pose = to_obj_pose(obs[:7][None])
+            cur_ee_pose = to_ee_pose(obs[14:14+7][None])
             cur_kp = gen_keypoints(cur_obj_pose) # 1,n_kp,D_kp
             densities, rec_vectors = rec_policy(cur_kp)
             print(np.mean(densities))
@@ -300,11 +301,11 @@ def main(output_dir, device):
                 rec_vectors = rec_vectors.reshape(cur_kp.shape[1:])
                 kp_traj = generate_kp_traj(cur_kp[0], rec_vectors, horizon=16, delay=delay, alpha=0.0001) # H,n_kp,D_kp
                 if delay > 0: delay -= 1
-                abs_kp = abs_traj(kp_traj, cur_obj_pose[0])
+                abs_kp = abs_traj(kp_traj, cur_ee_pose[0])
 
                 cur_rot6d = obs_quat_to_rot6d(obs[14+3:14+7])
                 cur_se3 = np.concatenate((obs[14:14+3], cur_rot6d))[None]
-                cur_action = np.hstack((abs_se3_vector(cur_se3, cur_obj_pose[0]), np.array([[gripper]])))
+                cur_action = np.hstack((abs_se3_vector(cur_se3, cur_ee_pose[0]), np.array([[gripper]])))
 
                 np_obs_dict = {
                     'obs': abs_kp.reshape(translator_cfg.horizon,-1)[None].astype(np.float32),
@@ -325,7 +326,7 @@ def main(output_dir, device):
                     lambda x: x.detach().to('cpu').numpy())
 
                 np_action = np_action_dict['action_pred'].squeeze(0)
-                detrans_np_action = deabs_se3_vector(np_action[:,:9], cur_obj_pose[0])
+                detrans_np_action = deabs_se3_vector(np_action[:,:9], cur_ee_pose[0])
                 detrans_np_action = np.hstack((detrans_np_action[:,:3], 
                                                 vec2rot6d.inverse(detrans_np_action[:,3:9]),
                                                 np_action[:,9:]))

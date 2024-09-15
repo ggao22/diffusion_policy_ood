@@ -147,7 +147,7 @@ def make_env(cfg):
         obs_keys=env_obs_keys,
         init_state=None,
         render_hw=(256,256),
-        render_camera_name='agentview',
+        render_camera_name='human',
     )
     return env
 
@@ -220,8 +220,11 @@ def main(output_dir, device):
     dataset = h5py.File(base_cfg.task.dataset['dataset_path'],'r')
 
     env = make_env(base_cfg)
+    # cam_id = env.env.env.sim.model.camera_name2id('agentview')
+    # env.env.env.viewer.set_camera(cam_id)
+    
     camera_transform_matrix = get_camera_transform_matrix(sim=env.env.env.sim, 
-                                                          camera_name='agentview', 
+                                                          camera_name='human', 
                                                           camera_height=256, 
                                                           camera_width=256)
 
