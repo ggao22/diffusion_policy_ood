@@ -194,7 +194,7 @@ def transform_from_pixels_to_world(pixels, depth_map, camera_to_world_transform)
 
     # sample from the depth map using the pixel locations with bilinear sampling
     pixels = pixels.astype(float)
-    im_h, im_w = depth_map.shape[-2:]
+    im_h, im_w = depth_map.shape[-3:-1]
     depth_map_reshaped = depth_map.reshape(-1, im_h, im_w, 1)
     z = bilinear_interpolate(im=depth_map_reshaped, x=pixels[..., 1:2], y=pixels[..., 0:1])
     z = z.reshape(*depth_map_leading_shape, 1)  # shape [..., 1]
@@ -225,15 +225,15 @@ def bilinear_interpolate(im, x, y):
     y0 = np.floor(y).astype(int)
     y1 = y0 + 1
 
-    x0 = np.clip(x0, 0, im.shape[1] - 1)
-    x1 = np.clip(x1, 0, im.shape[1] - 1)
-    y0 = np.clip(y0, 0, im.shape[0] - 1)
-    y1 = np.clip(y1, 0, im.shape[0] - 1)
+    x0 = np.clip(x0, 0, im.shape[2] - 1)
+    x1 = np.clip(x1, 0, im.shape[2] - 1)
+    y0 = np.clip(y0, 0, im.shape[1] - 1)
+    y1 = np.clip(y1, 0, im.shape[1] - 1)
 
-    Ia = im[y0, x0]
-    Ib = im[y1, x0]
-    Ic = im[y0, x1]
-    Id = im[y1, x1]
+    Ia = im[0, y0, x0][:,0]
+    Ib = im[0, y1, x0][:,0]
+    Ic = im[0, y0, x1][:,0]
+    Id = im[0, y1, x1][:,0]
 
     wa = (x1 - x) * (y1 - y)
     wb = (x1 - x) * (y - y0)

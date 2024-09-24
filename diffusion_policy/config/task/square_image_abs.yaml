@@ -3,9 +3,15 @@ name: square_image
 shape_meta: &shape_meta
   # acceptable types: rgb, low_dim
   obs:
-    agentview_image:
-      shape: [3, 84, 84]
+    # agentview_image:
+    #   shape: [3, 256, 256]
+    #   type: rgb
+    highview_image:
+      shape: [3, 256, 256]
       type: rgb
+    highview_depth:
+      shape: [1, 256, 256]
+      type: depth
     robot0_eye_in_hand_image:
       shape: [3, 84, 84]
       type: rgb

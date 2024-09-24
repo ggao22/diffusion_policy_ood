@@ -32,7 +32,7 @@ import robomimic.utils.file_utils as FileUtils
 import robomimic.utils.env_utils as EnvUtils
 import robomimic.utils.obs_utils as ObsUtils
 from robosuite.utils.transform_utils import pose2mat
-from camera_utils import get_camera_transform_matrix, project_points_from_world_to_camera
+from camera_utils import get_camera_transform_matrix, project_points_from_world_to_camera, get_camera_segmentation, transform_from_pixels_to_world
 
 from utils import to_obj_pose, gen_keypoints, abs_traj, abs_se3_vector, deabs_se3_vector, obs_quat_to_rot6d, quat_correction
 
@@ -202,6 +202,14 @@ def generate_recovery_kp_traj(obs, rec_policy, horizon, delay, alpha=0.01, rando
     kp_motion = np.repeat(np.cumsum(kp_motion, axis=0), n_kp, axis=0).reshape(horizon, n_kp, d_kp)
     return kp_base + kp_motion
 
+def check_neighbors(img, values, position, neighbors, threshold):
+    x,y = position
+    correct_values = 0
+    for x_inc in neighbors:
+        for y_inc in neighbors:
+            if img[x+x_inc, y+y_inc] in values: correct_values += 1
+    return correct_values > threshold
+
 
 @click.command()
 @click.option('-o', '--output_dir', required=True)
@@ -261,7 +269,7 @@ def main(output_dir, device):
 
    
     env_imgs = []
-    max_iter = 35
+    max_iter = 1
     n_obs_steps = base_cfg.n_obs_steps
     # envs_tested = [4,5]
     envs_tested = list(range(20))
@@ -275,13 +283,36 @@ def main(output_dir, device):
     OOD_THRESHOLD = 0.40
     action_horizon = 12
     
-
+    segmented = []
     for k in range(len(envs_tested)):
         n = envs_tested[k]
         env.init_state = dataset[f'data/demo_{n}/states'][0]
         # i=10,11,12 is xyz of object
         env.init_state[10:12] = env.init_state[10:12] + ood_offsets[k]
         obs = env.reset()
+
+        segmentation = get_camera_segmentation(sim=env.env.env.sim, 
+                                camera_name='agentview', 
+                                camera_height=256, 
+                                camera_width=256)
+        n_types = int(np.max(segmentation[...,1]))
+        segmentation_img = np.zeros((segmentation.shape[0],segmentation.shape[1],3))
+        seg_values = list(range(51,56))
+        neighbors = list(range(-4,4))
+        segmented_pts = []
+        for i in range(segmentation.shape[0]):
+            for j in range(segmentation.shape[1]):
+                if segmentation[i,j,1] in seg_values:
+                    if check_neighbors(segmentation[...,1], seg_values, (i,j), neighbors, threshold=9):
+                        segmentation_img[i,j] = plt.cm.rainbow(segmentation[i,j,1]/n_types)[:3]
+                        segmented_pts.append([i,j])
+                    else: segmentation_img[i,j] = plt.cm.rainbow(0)[:3]
+                else:
+                    segmentation_img[i,j] = plt.cm.rainbow(0)[:3]
+        segmented.append(segmented_pts)
+        plt.imshow(segmentation_img)
+        plt.show()
+
 
         past_obs = []
         past_obs = add_obs(obs, past_obs, n_obs_steps)
@@ -410,6 +441,9 @@ def main(output_dir, device):
             print(f'Env #{n} done')
         else:
             print(f'Env #{n} failed, max iter reached. Reward Managed {reward}')
+
+    segmented = np.array(segmented)
+    np.save('output/segmentation/square.npy', segmented)
 
     print(f"Test done, average reward {np.mean(rewards)}")
     kp_vis = np.vstack((kp_vis))
