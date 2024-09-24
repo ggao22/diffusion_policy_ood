@@ -5,8 +5,6 @@ import matplotlib.pyplot as plt
 from pycpd import RigidRegistration
 from sklearn.datasets import make_spd_matrix
 
-# from simpleicp import PointCloud, SimpleICP
-
 import open3d as o3d
 import numpy as np
 
@@ -55,13 +53,6 @@ def main(ptcloud_path):
                 # pass
         TY, (s_reg, R_reg, t_reg) = best_reg
         print(s_reg, R_reg, t_reg)
-
-        # pc_fix = PointCloud(ptcloud[k], columns=["x", "y", "z"])
-        # pc_mov = PointCloud(ptcloud[k+1], columns=["x", "y", "z"])
-        # icp = SimpleICP()
-        # icp.add_point_clouds(pc_fix, pc_mov)
-        # H, X_mov_transformed, rigid_body_transformation_params, distance_residuals = icp.run(max_overlap_distance=1)
-        # print(H)
 
         data = [voxel_ptclouds[k], TY, voxel_ptclouds[k+1]]
         fig_lims = 1
