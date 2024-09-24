@@ -187,6 +187,7 @@ def _get_full_obsact_dict(sampler):
 
 def _absolute_data(data):
     obj_pose = to_obj_pose(data['obs']) # H,4,4
+    print(data['obs'][:,:7])
     kp = gen_keypoints(obj_pose) # H,n_kp,D_kp
     abs_kp = abs_traj(kp, obj_pose[0])
     data['obs'] = abs_kp.reshape(-1,9)
