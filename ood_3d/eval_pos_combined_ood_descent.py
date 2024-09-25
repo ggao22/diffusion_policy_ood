@@ -303,11 +303,13 @@ def main(output_dir, device):
                 # kp_traj = generate_kp_traj(cur_kp[0], rec_vectors, horizon=16, delay=delay, alpha=0.0001) # H,n_kp,D_kp
                 kp_traj = generate_recovery_kp_traj(obs, rec_policy, horizon=16, delay=delay, alpha=0.00005, random_walk=0.008)
                 if delay > 0: delay -= 1
-                abs_kp = abs_traj(kp_traj, cur_obj_pose[0])
+                centralize_pose = cur_obj_pose[0]
+                centralize_pose[:3,:3] = np.eye(3)
+                abs_kp = abs_traj(kp_traj, centralize_pose)
 
                 cur_rot6d = obs_quat_to_rot6d(obs[14+3:14+7])
                 cur_se3 = np.concatenate((obs[14:14+3], cur_rot6d))[None]
-                cur_action = np.hstack((abs_se3_vector(cur_se3, cur_obj_pose[0]), np.array([[gripper]])))
+                cur_action = np.hstack((abs_se3_vector(cur_se3, centralize_pose), np.array([[gripper]])))
 
                 np_obs_dict = {
                     'obs': abs_kp.reshape(translator_cfg.horizon,-1)[None].astype(np.float32),
@@ -328,7 +330,7 @@ def main(output_dir, device):
                     lambda x: x.detach().to('cpu').numpy())
 
                 np_action = np_action_dict['action_pred'].squeeze(0)
-                detrans_np_action = deabs_se3_vector(np_action[:,:9], cur_obj_pose[0])
+                detrans_np_action = deabs_se3_vector(np_action[:,:9], centralize_pose)
                 detrans_np_action = np.hstack((detrans_np_action[:,:3], 
                                                 vec2rot6d.inverse(detrans_np_action[:,3:9]),
                                                 np_action[:,9:]))

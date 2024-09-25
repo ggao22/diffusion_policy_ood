@@ -4,6 +4,8 @@ import numpy as np
 import h5py
 from tqdm import tqdm
 import copy
+from scipy.spatial.transform import Rotation as R
+
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.dataset.base_dataset import BaseLowdimDataset, LinearNormalizer
 from diffusion_policy.model.common.normalizer import LinearNormalizer, SingleFieldLinearNormalizer
@@ -123,7 +125,7 @@ class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         data = self.sampler.sample_sequence(idx)
-        data = _absolute_data(data)
+        data = _absolute_data(data, random_seed=idx)
         torch_data = dict_apply(data, torch.from_numpy)
         return torch_data
 
@@ -180,20 +182,26 @@ def _get_full_obsact_dict(sampler):
     }
     for idx in range(0,len(sampler),2):
         data = sampler.sample_sequence(idx)
-        data = _absolute_data(data)
+        data = _absolute_data(data, random_seed=idx)
         datadict['obs'] = np.vstack((datadict['obs'], data['obs'])) if datadict['obs'].size else data['obs']
         datadict['action'] = np.vstack((datadict['action'], data['action'])) if datadict['action'].size else data['action']
     return datadict
 
-def _absolute_data(data):
+def _absolute_data(data, random_seed):
     obj_pose = to_obj_pose(data['obs']) # H,4,4
-    print(data['obs'][:,:7])
     kp = gen_keypoints(obj_pose) # H,n_kp,D_kp
-    abs_kp = abs_traj(kp, obj_pose[0])
+    centralize_pose = obj_pose[0]
+    centralize_pose[:3,:3] = np.eye(3)
+    if random_seed%2==1:
+        random_seed = -random_seed
+    random_seed = random_seed/3
+    centralize_pose[:2,:2] = np.array([
+        [np.cos(random_seed), -np.sin(random_seed)],
+        [np.sin(random_seed), np.cos(random_seed)]
+    ])
+    abs_kp = abs_traj(kp, centralize_pose)
     data['obs'] = abs_kp.reshape(-1,9)
-    # data['obs'] = kp.reshape(-1,9)
     
-    data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], obj_pose[0])
-    # data['action'][...,:9] = deabs_se3_vector(data['action'][...,:9], obj_pose[0])
+    data['action'][...,:9] = abs_se3_vector(data['action'][...,:9], centralize_pose)
     return data
 

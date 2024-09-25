@@ -59,7 +59,7 @@ def main(checkpoint, output_dir, device):
     dataloader = DataLoader(dataset, batch_size=128, shuffle=False, pin_memory=True)
     dataiter = iter(dataloader)
     vis_batch = next(dataiter) #B,horizon,dict
-    skips = 4
+    skips = 3
     obj_kps = vis_batch['obs'][::skips]
     ee = vis_batch['action'][::skips]
     obj_kps = obj_kps.reshape(-1,obj_kps.shape[-1])

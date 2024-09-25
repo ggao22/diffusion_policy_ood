@@ -27,7 +27,8 @@ combined_policy_cfg = {
     # best yet
     # 'recovery_ckpt': '/home/george/diffusion_policy/data/outputs/2024.09.05/18.57.19_train_diffusion_unet_lowdim_obsact_square_lowdim/checkpoints/latest.ckpt',
     # 'recovery_ckpt': '/home/george/diffusion_policy/data/outputs/2024.09.11/08.56.33_train_diffusion_unet_lowdim_obsact_square_lowdim/checkpoints/epoch=0400-train_action_mse_error=0.003.ckpt',
-    'recovery_ckpt': '/home/george/diffusion_policy/data/outputs/2024.09.20/12.05.33_train_diffusion_unet_lowdim_obsact_square_lowdim/checkpoints/epoch=0700-train_action_mse_error=0.003.ckpt',
+    # 'recovery_ckpt': '/home/george/diffusion_policy/data/outputs/2024.09.20/12.05.33_train_diffusion_unet_lowdim_obsact_square_lowdim/checkpoints/epoch=0700-train_action_mse_error=0.003.ckpt',
+    'recovery_ckpt': '/home/george/diffusion_policy/data/outputs/2024.09.24/17.04.27_train_diffusion_unet_lowdim_obsact_square_lowdim/checkpoints/epoch=0750-train_action_mse_error=0.000.ckpt',
     'base_ckpt': "/home/george/diffusion_policy/data/outputs/2024.09.05/16.12.10_train_diffusion_unet_lowdim_square_lowdim_abs/checkpoints/epoch=0250-test_mean_score=0.960.ckpt",
 }
 

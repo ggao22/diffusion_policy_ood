@@ -66,3 +66,6 @@ dependencies:
     - open3d
     - pycpd
     - scikit-learn
+    - diffusers==0.26.3
+    - transformers==4.38.1
+    - accelerate==0.27.2
