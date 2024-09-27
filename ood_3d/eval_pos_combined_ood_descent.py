@@ -41,7 +41,7 @@ from models import GMMGradient
 from config import cfg as rec_cfg
 from config import combined_policy_cfg
 
-def draw_frame_axis_to_2d(T, ax, world_to_pixel, color, length=0.05, alpha=1.0):
+def draw_frame_axis_to_2d(T, ax, world_to_pixel, color, render_size, length=0.05, alpha=1.0):
     if ax is None:
         return
     
@@ -56,18 +56,18 @@ def draw_frame_axis_to_2d(T, ax, world_to_pixel, color, length=0.05, alpha=1.0):
 
     stack_x = project_points_from_world_to_camera(stack_x, 
                                         world_to_camera_transform=world_to_pixel, 
-                                        camera_height=256, 
-                                        camera_width=256)
+                                        camera_height=render_size, 
+                                        camera_width=render_size)
     
     stack_y = project_points_from_world_to_camera(stack_y, 
                                         world_to_camera_transform=world_to_pixel, 
-                                        camera_height=256, 
-                                        camera_width=256)
+                                        camera_height=render_size, 
+                                        camera_width=render_size)
     
     stack_z = project_points_from_world_to_camera(stack_z, 
                                         world_to_camera_transform=world_to_pixel, 
-                                        camera_height=256, 
-                                        camera_width=256)
+                                        camera_height=render_size, 
+                                        camera_width=render_size)
 
     ax.plot(stack_x[:,1], stack_x[:,0], color=color, alpha=alpha)
     ax.plot(stack_y[:,1], stack_y[:,0], color=color, alpha=alpha)
@@ -122,7 +122,7 @@ def load_policy(ckpt, device, output_dir):
     return policy, cfg
 
 
-def make_env(cfg):
+def make_env(cfg, render_size):
     dataset_path = os.path.expanduser(cfg.task.dataset['dataset_path'])
     env_meta = FileUtils.get_env_metadata_from_dataset(
         dataset_path)
@@ -146,7 +146,7 @@ def make_env(cfg):
         env=robomimic_env,
         obs_keys=env_obs_keys,
         init_state=None,
-        render_hw=(256,256),
+        render_hw=(render_size,render_size),
         render_camera_name='agentview',
     )
     return env
@@ -161,7 +161,7 @@ def create_env(env_meta, obs_keys):
         # only way to not show collision geometry
         # is to enable render_offscreen
         # which uses a lot of RAM.
-        render_offscreen=False,
+        render_offscreen=True,
         use_image_obs=False, 
     )
     return env
@@ -219,11 +219,12 @@ def main(output_dir, device):
     base_cfg.task.dataset['dataset_path'] = '../' + base_cfg.task.dataset['dataset_path']
     dataset = h5py.File(base_cfg.task.dataset['dataset_path'],'r')
 
-    env = make_env(base_cfg)
+    render_size = 1024
+    env = make_env(base_cfg, render_size)
     camera_transform_matrix = get_camera_transform_matrix(sim=env.env.env.sim, 
                                                           camera_name='agentview', 
-                                                          camera_height=256, 
-                                                          camera_width=256)
+                                                          camera_height=render_size, 
+                                                          camera_width=render_size)
 
     fig = plt.figure(figsize=(5,5))
     ax1 = fig.add_subplot(1, 1, 1)
@@ -235,12 +236,12 @@ def main(output_dir, device):
         ax1.set_title(f"Env #{str(env_num)}")
         cam_kp = project_points_from_world_to_camera(kp, 
                                                      world_to_camera_transform=camera_transform_matrix, 
-                                                     camera_height=256, 
-                                                     camera_width=256)
-        for i in range(len(cam_kp)):
-            ax1.scatter(cam_kp[i,1], cam_kp[i,0], color=plt.cm.rainbow(i/len(cam_kp)), s=15)
-        for pose in poses:
-            draw_frame_axis_to_2d(pose, ax1, camera_transform_matrix, color=plt.cm.rainbow(1), length=0.1, alpha=1.0)
+                                                     camera_height=render_size, 
+                                                     camera_width=render_size)
+        # for i in range(len(cam_kp)):
+        #     ax1.scatter(cam_kp[i,1], cam_kp[i,0], color=plt.cm.rainbow(i/len(cam_kp)), s=15)
+        # for pose in poses:
+        #     draw_frame_axis_to_2d(pose, ax1, camera_transform_matrix, render_size, color=plt.cm.rainbow(1), length=0.1, alpha=1.0)
 
 
     vec2rot6d = RotationTransformer(from_rep='axis_angle', to_rep='rotation_6d')
@@ -416,7 +417,7 @@ def main(output_dir, device):
     print(f"Test done, average reward {np.mean(rewards)}")
     kp_vis = np.vstack((kp_vis))
     ani = FuncAnimation(fig, animate, frames=zip(env_imgs,kp_vis,gripper_states,env_labels,poses), interval=100, save_count=sys.maxsize)
-    ani.save(os.path.join(output_dir,'combined_ood_descent.mp4'), writer='ffmpeg', fps=10) 
+    ani.save(os.path.join(output_dir,'combined_ood_descent.mp4'), writer='ffmpeg', fps=10, dpi=400) 
     plt.show()
 
 

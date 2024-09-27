@@ -31,9 +31,9 @@ def main(ptcloud_path):
         voxel_ptclouds.append(np.array(to_voxel_centers(ptcloud[k])))
         # np.random.shuffle(voxel_ptclouds[k])
     
+    target = np.copy(voxel_ptclouds[0])
+    
     for k in range(len(voxel_ptclouds)-1):
-
-        target = np.copy(voxel_ptclouds[k])
         TY = np.copy(voxel_ptclouds[k+1])
         iters = 150
 
@@ -48,17 +48,19 @@ def main(ptcloud_path):
                     best_error = reg.q
                     best_reg = TY, (s_reg, R_reg, t_reg)
             except:
-                target = np.copy(voxel_ptclouds[k])
+                # target = np.copy(voxel_ptclouds[k])
                 TY = np.copy(voxel_ptclouds[k+1])
                 # pass
         TY, (s_reg, R_reg, t_reg) = best_reg
         print(s_reg, R_reg, t_reg)
 
-        data = [voxel_ptclouds[k], TY, voxel_ptclouds[k+1]]
+        data = [target, TY, voxel_ptclouds[k+1]]
+        titles = ['Target', 'Registered Source', 'Original Source']
         fig_lims = 1
         fig = plt.figure(figsize=(30,10))
         for d in range(len(data)):
             ax = fig.add_subplot(1, len(data), d+1, projection='3d')
+            ax.set_title(titles[d])
             ax.set_xlim(-fig_lims/2, fig_lims/2)
             ax.set_ylim(-fig_lims/2, fig_lims/2)
             ax.set_zlim(0, fig_lims)
