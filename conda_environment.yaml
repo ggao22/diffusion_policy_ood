@@ -56,8 +56,8 @@ dependencies:
     - free-mujoco-py==2.1.6
     - pygame==2.1.2
     - pybullet-svl==3.1.6.4
-    - robosuite @ https://github.com/cheng-chi/robosuite/archive/277ab9588ad7a4f4b55cf75508b44aa67ec171f0.tar.gz
-    - robomimic @ https://github.com/ARISE-Initiative/robomimic/archive/diffusion-updated.tar.gz
+    - robosuite @ https://github.com/ggao22/robosuite/archive/diffusion-policy.tar.gz
+    - robomimic @ https://github.com/ggao22/robomimic/archive/diffusion-policy.tar.gz
     - pytorchvideo==0.1.5
     # pip package required for jpeg-xl
     - imagecodecs==2022.9.26
