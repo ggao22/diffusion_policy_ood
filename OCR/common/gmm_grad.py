@@ -3,9 +3,6 @@ import torch.nn.functional as F
 from torch import nn
 import numpy as np
 
-import sys
-sys.path.append('/home/georgegao/diffusion_policy_ood/ood')
-
 from torch import tensor, log, exp, flatten
 from torch.distributions import MultivariateNormal as MVN
 

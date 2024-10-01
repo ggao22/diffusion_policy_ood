@@ -244,8 +244,6 @@ def main(output_dir, device):
 
 
     vec2rot6d = RotationTransformer(from_rep='axis_angle', to_rep='rotation_6d')
-    quat2mat = RotationTransformer(from_rep='quaternion', to_rep='matrix')
-    quat2rot6d = RotationTransformer(from_rep='quaternion', to_rep='rotation_6d')
     vec2mat = RotationTransformer(from_rep='axis_angle', to_rep='matrix')
 
     gmms = []
@@ -264,7 +262,7 @@ def main(output_dir, device):
     max_iter = 35
     n_obs_steps = base_cfg.n_obs_steps
     # envs_tested = [4,5]
-    envs_tested = list(range(20))
+    envs_tested = list(range(2))
     np.random.seed(3501000)
     ood_offsets = np.random.uniform([-0.01,-0.35],[0.01,-0.20],(len(envs_tested),2))
     env_labels = []
@@ -272,11 +270,12 @@ def main(output_dir, device):
     kp_vis = []
     poses = []
     gripper_states = []
-    OOD_THRESHOLD = 0.40
+    OOD_THRESHOLD = 30
     action_horizon = 12
     
 
     for k in range(len(envs_tested)):
+        if k==0:continue
         n = envs_tested[k]
         env.init_state = dataset[f'data/demo_{n}/states'][0]
         # i=10,11,12 is xyz of object
@@ -285,13 +284,11 @@ def main(output_dir, device):
 
         past_obs = []
         past_obs = add_obs(obs, past_obs, n_obs_steps)
-        rec_policy.eta = 1.0
         delay = 16
         gripper = -1
 
         # env policy control
         for iter in range(max_iter):
-            
             cur_obj_pose = to_obj_pose(obs[:7][None])
             cur_kp = gen_keypoints(cur_obj_pose) # 1,n_kp,D_kp
             densities, rec_vectors = rec_policy(cur_kp)
