@@ -8,7 +8,6 @@ import sys
 # use line-buffering for both stdout and stderr
 sys.stdout = open(sys.stdout.fileno(), mode='w', buffering=1)
 sys.stderr = open(sys.stderr.fileno(), mode='w', buffering=1)
-sys.path.append('../')
 
 import hydra
 from omegaconf import OmegaConf
@@ -20,7 +19,7 @@ OmegaConf.register_new_resolver("eval", eval, replace=True)
 
 @hydra.main(
     version_base=None,
-    config_path=str(pathlib.Path(__file__).parent.parent.joinpath(
+    config_path=str(pathlib.Path(__file__).parent.joinpath(
         'diffusion_policy','config')),
     config_name='train_diffusion_unet_lowdim_obsact_workspace'
 )
