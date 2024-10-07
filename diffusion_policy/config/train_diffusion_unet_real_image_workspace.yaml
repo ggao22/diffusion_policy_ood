@@ -1,9 +1,9 @@
 defaults:
   - _self_
-  - task: real_pusht_image
+  - task: bottle_image_abs
 
 name: train_diffusion_unet_image
-_target_: diffusion_policy.workspace.train_diffusion_unet_image_workspace.TrainDiffusionUnetImageWorkspace
+_target_: diffusion_policy.workspace.train_diffusion_unet_real_image_workspace.TrainDiffusionUnetImageWorkspace
 
 task_name: ${task.name}
 shape_meta: ${task.shape_meta}
@@ -43,8 +43,8 @@ policy:
       _target_: diffusion_policy.model.vision.model_getter.get_resnet
       name: resnet18
       weights: null
-    resize_shape: [240, 320]
-    crop_shape: [216, 288] # ch, cw 240x320 90%
+    resize_shape: [120, 160]
+    # crop_shape: [216, 288] # ch, cw 240x320 90%
     random_crop: True
     use_group_norm: True
     share_rgb_model: False
