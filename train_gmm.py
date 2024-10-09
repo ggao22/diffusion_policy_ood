@@ -6,37 +6,47 @@ python train.py --config-name=train_diffusion_lowdim_workspace
 
 import os
 from datetime import datetime
-
+import click
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
+import yaml
 
 from sklearn.mixture import GaussianMixture
-from utils import draw_latent, robosuite_data_to_obj_dataset, to_obj_pose, gen_keypoints
+
+import OCR.utils.utils_2d as utils_2d
+import OCR.utils.utils_3d as utils_3d
 
 
+@click.command()
+@click.option('-rc', '--recovery-config', required=True)
+def main(recovery_config):
+    with open(os.path.join('OCR', 'config', recovery_config+'.yaml'), 'r') as f:
+        cfg = yaml.safe_load(f)
+    train_gmm(cfg)
 
-def train_gmm(recovery_cfg, task_cfg):
+
+def train_gmm(cfg):
     # config
     now = datetime.now()
-    outpath = os.path.join('data/outputs', now.strftime("%Y.%m.%d"), now.strftime("%H.%M.%S") + recovery_cfg['name'] + '_gmm')
+    outpath = os.path.join('data/outputs/', now.strftime("%Y.%m.%d"), now.strftime("%H.%M.%S")+'_'+cfg['name']+'_gmm')
     os.makedirs(outpath, exist_ok=False)
 
-    kp_dim = task_cfg['keypoint_dim']
+    kp_dim = cfg['keypoint_dim']
     if kp_dim == 3:
         ### Robomimic Task ###
         # get keypoints from pose
-        data = h5py.File(task_cfg["dataset_path"], "r")
-        object_dataset = robosuite_data_to_obj_dataset(data) #N,14
+        data = h5py.File(cfg['dataset_path'], "r")
+        object_dataset = utils_3d.robosuite_data_to_obj_dataset(data) #N,14
         N, _ = object_dataset.shape
-        object_pose_dataset = to_obj_pose(object_dataset) #N,4,4
-        object_kp_dataset = gen_keypoints(object_pose_dataset) #N,3,3
+        object_pose_dataset = utils_3d.to_obj_pose(object_dataset) #N,4,4
+        object_kp_dataset = utils_3d.gen_keypoints(object_pose_dataset) #N,3,3
         object_kp_dataset = object_kp_dataset.reshape(N,-1) #N,9
 
     # model
     gmms = []
     for i in range(object_kp_dataset.shape[1]//kp_dim):
-        gmms.append(GaussianMixture(n_components=recovery_cfg["n_components"]))
+        gmms.append(GaussianMixture(n_components=cfg['gmm']['n_components']))
 
     # fit gmm
     print("Fitting GMM.")
@@ -66,8 +76,9 @@ def train_gmm(recovery_cfg, task_cfg):
         gmms_latent.append(gmm_latent)
     gmms_latent = np.hstack((gmms_latent))
 
-    draw_latent(object_kp_dataset[::25], os.path.join(outpath, "full_latent.png"))
-    draw_latent(gmms_latent, os.path.join(outpath, "gmms_latent.png"))
+    if kp_dim == 3:
+        utils_3d.draw_latent(object_kp_dataset[::25], os.path.join(outpath, "full_latent.png"))
+        utils_3d.draw_latent(gmms_latent, os.path.join(outpath, "gmms_latent.png"))
     
     # save gmm
     np.savez(os.path.join(outpath, "gmms.npz"), **gmms_params)

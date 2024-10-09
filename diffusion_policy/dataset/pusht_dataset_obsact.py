@@ -22,7 +22,8 @@ class PushTLowdimObsactDataset(BaseLowdimDataset):
             action_key='action',
             seed=42,
             val_ratio=0.0,
-            max_train_episodes=None
+            max_train_episodes=None,
+            copy=True,
             ):
         super().__init__()
         self.replay_buffer = ReplayBuffer.copy_from_path(
@@ -43,7 +44,8 @@ class PushTLowdimObsactDataset(BaseLowdimDataset):
             sequence_length=horizon,
             pad_before=pad_before, 
             pad_after=pad_after,
-            episode_mask=train_mask
+            episode_mask=train_mask,
+            copy=copy,
             )
         self.obs_key = obs_key
         self.state_key = state_key

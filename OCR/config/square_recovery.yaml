@@ -1,6 +1,7 @@
 name: square_recovery
 
-task_config: square_lowdim_abs_obsact
+keypoint_dim: 3
+dataset_path: data/robomimic/datasets/square/ph/low_dim_abs.hdf5
 
 gmm:
   n_components: 6

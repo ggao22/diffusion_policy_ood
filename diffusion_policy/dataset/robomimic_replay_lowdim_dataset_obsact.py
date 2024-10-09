@@ -32,7 +32,8 @@ class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
             use_legacy_normalizer=False,
             seed=42,
             val_ratio=0.0,
-            max_train_episodes=None
+            max_train_episodes=None,
+            copy=True,
         ):
         obs_keys = list(obs_keys)
         rotation_transformer = RotationTransformer(
@@ -66,7 +67,8 @@ class RobomimicReplayLowdimObsactDataset(BaseLowdimDataset):
             sequence_length=horizon,
             pad_before=pad_before, 
             pad_after=pad_after,
-            episode_mask=train_mask)
+            episode_mask=train_mask,
+            copy=copy)
         
         self.replay_buffer = replay_buffer
         self.sampler = sampler

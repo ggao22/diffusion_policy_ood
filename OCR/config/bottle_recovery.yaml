@@ -1,0 +1,20 @@
+name: bottle_recovery
+
+keypoint_dim: 3
+dataset_path: data/real/datasets/bottle/ph/full_abs.hdf5
+
+gmm:
+  n_components: 2
+  params_used: /home/george/diffusion_policy/data/outputs/2024.10.07/16.10.22_bottle_recovery_gmm/gmms.npz #2
+  # params_used: /home/george/diffusion_policy/data/outputs/2024.10.07/16.11.32_bottle_recovery_gmm/gmms.npz #6
+  # params_used: /home/george/diffusion_policy/data/outputs/2024.10.08/17.09.26_bottle_recovery_gmm/gmms.npz #3
+
+recovery:
+  alpha: 0.00005
+  random_walk: 0.008
+
+translator_policy:
+  checkpoint_used: /home/george/diffusion_policy/data/outputs/2024.10.07/10.22.29_train_diffusion_unet_lowdim_obsact_bottle_lowdim/checkpoints/epoch=1050-train_action_mse_error=0.001.ckpt
+
+base_policy:
+  checkpoint_used: /home/george/diffusion_policy/data/outputs/2024.10.07/20.07.33_train_diffusion_unet_image_bottle_image/checkpoints/epoch=0400-train_loss=0.004.ckpt

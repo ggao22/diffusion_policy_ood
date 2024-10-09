@@ -186,6 +186,19 @@ def generate_kp_traj(kp_start, recovery_vec, horizon, delay, alpha=0.01):
     vecs = np.repeat(np.cumsum(motion_vecs, axis=0), n_kp, axis=0).reshape(horizon, n_kp, d_kp)
     return kp_base + vecs
 
+def load_recovery_gradient(rec_cfg):
+    gmms = []
+    for i in range(3):
+        gmms.append(GaussianMixture(n_components=rec_cfg["n_components"]))
+
+    gmms_params = np.load(os.path.join(rec_cfg['testing_dir'], "gmms.npz"), allow_pickle=True)
+    for i in range(len(gmms_params)):
+        for (key,val) in gmms_params[str(i)][()].items():
+            setattr(gmms[i], key, val)
+
+    rec_grad_generator = GMMGradient(gmms_params)
+    return rec_grad_generator
+
 
 
 @click.command()

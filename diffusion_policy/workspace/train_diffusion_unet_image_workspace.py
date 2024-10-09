@@ -166,6 +166,10 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
                         if train_sampling_batch is None:
                             train_sampling_batch = batch
 
+                        print(batch['obs']['robot0_eef_pos'].shape)
+                        print(batch['obs']['agentview_image'].shape)
+                        print(batch['action'].shape)
+
                         # compute loss
                         raw_loss = self.model.compute_loss(batch)
                         loss = raw_loss / cfg.training.gradient_accumulate_every
@@ -244,6 +248,7 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
                         # sample trajectory from training set, and evaluate difference
                         batch = dict_apply(train_sampling_batch, lambda x: x.to(device, non_blocking=True))
                         obs_dict = batch['obs']
+                        print(batch['obs'])
                         gt_action = batch['action']
                         
                         result = policy.predict_action(obs_dict)
