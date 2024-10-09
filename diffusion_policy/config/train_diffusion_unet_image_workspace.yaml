@@ -1,8 +1,8 @@
 defaults:
   - _self_
   # - task: lift_image_abs
-  # - task: square_image_abs
-  - task: bottle_image_abs
+  - task: square_image_abs
+  # - task: bottle_image_abs
 
 name: train_diffusion_unet_image
 _target_: diffusion_policy.workspace.train_diffusion_unet_image_workspace.TrainDiffusionUnetImageWorkspace
@@ -133,7 +133,7 @@ checkpoint:
   topk:
     monitor_key: train_loss
     mode: max
-    k: 3
+    k: 2
     format_str: 'epoch={epoch:04d}-train_loss={train_loss:.3f}.ckpt'
   save_last_ckpt: True
   save_last_snapshot: False
