@@ -7,6 +7,7 @@ import sys
 # use line-buffering for both stdout and stderr
 sys.stdout = open(sys.stdout.fileno(), mode='w', buffering=1)
 sys.stderr = open(sys.stderr.fileno(), mode='w', buffering=1)
+sys.path.append('../')
 
 import os
 import pathlib
@@ -107,16 +108,16 @@ def main(output_dir, device, screen_size):
 
     # create PushT env with keypoints
     kp_kwargs = PushTKeypointsImageEnv.genenerate_keypoint_manager_params()
-    env = PushTKeypointsImageEnv(render_size=screen_size, render_action=False,  display_rec=True, rec_cfg=rec_cfg, **kp_kwargs)
+    env = PushTKeypointsImageEnv(render_size=screen_size, render_action=False,  display_rec=False, rec_cfg=rec_cfg, **kp_kwargs)
     clock = pygame.time.Clock()
 
     n_obs_steps = base_cfg.n_obs_steps
 
     states = []
     env_imgs = []
-    max_iter = 20
+    max_iter = 60
     episodes = 1
-    ood_threshold = 40
+    ood_threshold = 80
 
     for n in range(episodes):
         seed = n+350
@@ -136,31 +137,14 @@ def main(output_dir, device, screen_size):
         center_ang = get_center_ang(kp)
         kp_start = centralize(kp, center_pos, center_ang, screen_size) #9,2
 
+        reached_id = False
+
         # env policy control
         for iter in range(max_iter):
             print(np.linalg.norm(info['rec_vec'].mean(axis=0)))
-            if np.linalg.norm(info['rec_vec'].mean(axis=0)) < ood_threshold and iter>0:
-                # case: In-Distribution
-                past_obs = add_obs(obs, past_obs, n_obs_steps)
+            if np.linalg.norm(info['rec_vec'].mean(axis=0)) > ood_threshold and not reached_id:
+            # if False:
 
-
-                # device transfer
-                obs_dict = dict_apply(past_obs, 
-                    lambda x: torch.from_numpy(x).to(
-                        device=device))
-
-                # run policy
-                with torch.no_grad():
-                    action_dict = base_policy.predict_action(obs_dict)
-                
-                np_action_dict = dict_apply(action_dict,
-                    lambda x: x.detach().to('cpu').numpy())
-
-                action = np_action_dict['action'].squeeze(0)
-
-                states.extend([0]*action.shape[0])
-                
-            else:
                 # case: Out-Of-Distribution
                 kp = obs['keypoints'][:18].reshape(9,2)
                 rec_vec = info['rec_vec']
@@ -169,7 +153,8 @@ def main(output_dir, device, screen_size):
                 center_ang = get_center_ang(kp)
                 kp_start = centralize(kp, center_pos, center_ang, screen_size) #9,2
                 rec_vec = centralize_grad(rec_vec, center_ang) #9,2
-                kp_traj = generate_kp_traj(kp_start, rec_vec, horizon=16, delay=10, alpha=1.0)
+                kp_traj = generate_kp_traj(kp_start, rec_vec, horizon=16, delay=12, alpha=5.0)
+                # alpha += 0.2
 
                 init_action = centralize(np.expand_dims(info['pos_agent'],0), center_pos, center_ang, screen_size)
 
@@ -195,6 +180,28 @@ def main(output_dir, device, screen_size):
                 action = decentralize(action, center_pos, center_ang, screen_size)
 
                 states.extend([1]*action.shape[0])
+                
+            else:
+                reached_id = True
+                # case: In-Distribution
+                past_obs = add_obs(obs, past_obs, n_obs_steps)
+
+
+                # device transfer
+                obs_dict = dict_apply(past_obs, 
+                    lambda x: torch.from_numpy(x).to(
+                        device=device))
+
+                # run policy
+                with torch.no_grad():
+                    action_dict = base_policy.predict_action(obs_dict)
+                
+                np_action_dict = dict_apply(action_dict,
+                    lambda x: x.detach().to('cpu').numpy())
+
+                action = np_action_dict['action'].squeeze(0)
+
+                states.extend([0]*action.shape[0])
 
 
             # step env and render
@@ -218,7 +225,7 @@ def main(output_dir, device, screen_size):
     print(len(env_imgs))
     print(len(states))
     ani = FuncAnimation(fig, animate, frames=zip(env_imgs,states), interval=50, save_count=sys.maxsize)
-    ani.save(os.path.join(output_dir,'base_ood.mp4'), writer='ffmpeg', fps=20) 
+    ani.save(os.path.join(output_dir,'base.mp4'), writer='ffmpeg', fps=20) 
     plt.show()
 
 

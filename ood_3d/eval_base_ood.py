@@ -50,7 +50,7 @@ def create_env(env_meta, obs_keys):
         # only way to not show collision geometry
         # is to enable render_offscreen
         # which uses a lot of RAM.
-        render_offscreen=False,
+        render_offscreen=True,
         use_image_obs=False, 
     )
     return env
@@ -136,7 +136,7 @@ def main(checkpoint, output_dir, device):
     env_imgs = []
     max_iter = 35
     n_obs_steps = cfg.n_obs_steps
-    envs_tested = list(range(20))
+    envs_tested = list(range(1))
     ood_offsets = np.random.uniform([-0.05,-0.3],[0.05,-0.15],(len(envs_tested),2))
     env_labels = []
     rewards = []
@@ -194,7 +194,7 @@ def main(checkpoint, output_dir, device):
     
     print(f"Test done, average reward {np.mean(rewards)}")
     ani = FuncAnimation(fig, animate, frames=zip(env_imgs,env_labels), interval=100, save_count=sys.maxsize)
-    ani.save(os.path.join(output_dir,'base_id.mp4'), writer='ffmpeg', fps=10) 
+    ani.save(os.path.join(output_dir,'base_id.mp4'), writer='ffmpeg', fps=10, dpi=400) 
     plt.show()
 
 

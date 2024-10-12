@@ -1,4 +1,4 @@
-defaults:
+wdefaults:
   - _self_
   # - task: pusht_lowdim_obsact
   # - task: square_lowdim_abs_obsact

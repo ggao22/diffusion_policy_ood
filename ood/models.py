@@ -5,6 +5,9 @@ import numpy as np
 
 from math import pi
 
+import sys
+sys.path.append('ood/')
+
 
 class EquivariantMap(nn.Module):
     def __init__(self, input_size=(180,256), input_ch=3, output_size=3):
@@ -77,10 +80,6 @@ def calculate_matmul(mat_a, mat_b):
 
 
 
-import os
-import sys
-sys.path.append('/home/georgegao/diffusion_policy_ood/ood')
-
 from torch import tensor, log, exp, flatten
 from torch.distributions import MultivariateNormal as MVN
 from utils import normalize_data, unnormalize_data, unnormalize_gradient
@@ -137,16 +136,53 @@ class RecoveryPolicy(nn.Module):
 
 
 
-# class Decoder(nn.Module):
-#     def __init__(self, in_dim=18):
-#         super(Decoder,self).__init__()
-#         self.in_dim = in_dim
-#         self.layer = nn.Linear(self.in_dim, self.in_dim)
+class GMMGradient(nn.Module):
+    def __init__(self, GMM_PARAMS):
+        super(GMMGradient,self).__init__()
+        self.GMM_PARAMS = GMM_PARAMS
 
-#     def forward(self,x):
-#         x = self.layer(x)
-#         return x
+        # set parameters for negative exponential
+        self.eps = 5500
+        self.lmb = 1100
+    
+    def param_negative_exponential(self, x):
+        return np.exp((-x+self.eps)/self.lmb)
 
-#     def loss(self, pred, true):
-#         loss = F.mse_loss(pred, true, reduction='sum')
-#         return loss
+    def pdfs(self, x):
+        densities = []
+        x.retain_grad()
+        for i in range(len(self.GMM_PARAMS)):
+            gmm_params = self.GMM_PARAMS[str(i)][()]
+            MVNs = [MVN(mu, sigma) for (mu, sigma) in zip(tensor(gmm_params["means_"]), tensor(gmm_params["covariances_"]))]
+            pdf = sum([pi * exp(MVN.log_prob(x[i])) for (pi, MVN) in zip(tensor(gmm_params['weights_']), MVNs)])
+            pdf.backward()
+            pdf = float(pdf.detach().cpu())
+            densities.append([pdf]*2)
+        return np.array(densities).flatten()
+    
+    def forward(self,kps):
+        densities = []
+        grad_vectors = []
+        for i in range(kps.shape[0]):
+            dens, grad = self._get_grad(kps[i])
+            densities.append(dens)
+            grad_vectors.append(grad)
+        grad_vectors = np.array(grad_vectors)
+        densities = np.array(densities)
+        return densities, grad_vectors
+    
+    def _get_grad(self, z):
+        z = tensor(z, requires_grad=True)
+        densities = self.pdfs(z)
+
+        grad = z.grad.detach().cpu().numpy()
+        negexp_grad = np.copy(grad)
+        for i in range(len(self.GMM_PARAMS)):
+            grad_kp = grad[i]
+            grad_kp_norm = grad_kp/np.linalg.norm(grad_kp)
+            mag = self.param_negative_exponential(np.linalg.norm(grad_kp))
+            negexp_grad[i] = grad_kp_norm*mag
+
+        return densities, negexp_grad.flatten()
+    
+

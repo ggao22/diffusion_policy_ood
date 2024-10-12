@@ -1,5 +1,6 @@
 import os
 
+
 import gym
 from gym import spaces
 
@@ -16,7 +17,7 @@ from diffusion_policy.env.pusht.pymunk_override import DrawOptions
 
 import torch
 from torchvision import transforms
-from ood.models import EquivalenceMap, RecoveryPolicy
+from ood.models import GMMGradient, RecoveryPolicy
 import matplotlib.pyplot as plt
 
 
@@ -96,9 +97,10 @@ class PushTEnv(gym.Env):
 
         self.display_rec = display_rec
         self.rec_vec = np.zeros((9,2))
+        self.density = np.inf
+        self.rec_cfg = rec_cfg
 
-        if display_rec:
-            assert(rec_cfg is not None)
+        if self.rec_cfg:
             self.rec_policy = self._setup_rec_policy(rec_cfg)
     
     def reset(self):
@@ -123,9 +125,10 @@ class PushTEnv(gym.Env):
         observation = self._get_obs()
 
         # setup rec_vec
-        img = self._render_frame(mode='rgb_array')
-        dens, rec_vec = self.rec_policy(self._to_recovery_input(img).to(self.device))
-        self.rec_vec = ((1-dens)*rec_vec).reshape(9,2) * 1
+        if self.rec_cfg:
+            kp = self.draw_kp_map['block']
+            dens, rec_vec = self.rec_policy(kp[None])
+            self.rec_vec = (rec_vec).reshape(9,2)
 
         return observation
 
@@ -175,21 +178,8 @@ class PushTEnv(gym.Env):
         return TeleopAgent(act)
     
     def _setup_rec_policy(self, cfg):
-        encoder = EquivalenceMap(input_size=cfg["input_size"], output_size=cfg["action_dim"])
-
-        if torch.cuda.is_available():
-            encoder.cuda()
-            self.device = 'cuda'
-        else:
-            self.device = 'cpu'
-
-        encoder_ckpt = torch.load(os.path.join(cfg['testing_dir'], "encoder.pt"))
-        encoder.load_state_dict(encoder_ckpt['model_state_dict'])
-
         gmms_params = np.load(os.path.join(cfg['testing_dir'], "gmms.npz"), allow_pickle=True)
-        stats = np.load(os.path.join(cfg['testing_dir'], "stats.npz"), allow_pickle=True)
-        latent_stats = stats['latent_stats'][()]
-        rec_policy = RecoveryPolicy(encoder, gmms_params, latent_stats, eps=cfg['eps'], tau=cfg['tau'], eta=cfg['eta'])
+        rec_policy = GMMGradient(gmms_params)
         return rec_policy
 
 
@@ -219,7 +209,8 @@ class PushTEnv(gym.Env):
             'block_pose': np.array(list(self.block.position) + [self.block.angle]),
             'goal_pose': self.goal_pose,
             'n_contacts': n_contact_points_per_step,
-            'rec_vec': self.rec_vec}
+            'rec_vec': self.rec_vec,
+            'density': self.density}
         return info
 
     def _render_frame(self, mode):
@@ -265,22 +256,24 @@ class PushTEnv(gym.Env):
                     markerSize=marker_size, thickness=thickness)
                 
         
-
-        if self.display_rec and mode == 'human':
+        if self.rec_cfg:
             kp = self.draw_kp_map['block']
-            dens, rec_vec = self.rec_policy(self._to_recovery_input(img).to(self.device))
-            self.rec_vec = ((1-dens)*rec_vec).reshape(9,2) * 1
+            dens, rec_vec = self.rec_policy(kp[None])
+            self.rec_vec = (rec_vec).reshape(9,2)
+            self.density = np.mean(dens)
 
-            pygame.draw.line(canvas, [255,0,0], kp.mean(axis=0), kp.mean(axis=0)+self.rec_vec.mean(axis=0), width=5)
+            if self.display_rec and mode == 'human':
+
+                pygame.draw.line(canvas, [255,0,0], kp.mean(axis=0), kp.mean(axis=0)+self.rec_vec.mean(axis=0), width=5)
+                
+                # for i in range(self.rec_vec.shape[0]):
+                #     pygame.draw.line(canvas, [0,0,255], kp[i], kp[i]+self.rec_vec[i], width=5)
+
+                cv2.line(img, (kp.mean(axis=0)/512 * self.render_size).astype(int), ((kp.mean(axis=0)+self.rec_vec.mean(axis=0))/512 * self.render_size).astype(int), color=[255,0,0], thickness=2)
+
+                # for i in range(self.rec_vec.shape[0]):
+                #     cv2.line(img, (kp[i]/512 * 96).astype(int), ((kp[i]+self.rec_vec[i])/512 * 96).astype(int), color=[255,0,0], thickness=1)
             
-            # for i in range(self.rec_vec.shape[0]):
-            #     pygame.draw.line(canvas, [0,0,255], kp[i], kp[i]+self.rec_vec[i], width=5)
-
-            cv2.line(img, (kp.mean(axis=0)/512 * self.render_size).astype(int), ((kp.mean(axis=0)+self.rec_vec.mean(axis=0))/512 * self.render_size).astype(int), color=[255,0,0], thickness=2)
-
-            # for i in range(self.rec_vec.shape[0]):
-            #     cv2.line(img, (kp[i]/512 * 96).astype(int), ((kp[i]+self.rec_vec[i])/512 * 96).astype(int), color=[255,0,0], thickness=1)
-        
 
         if mode == "human":
             # The following line copies our drawings from `canvas` to the visible window

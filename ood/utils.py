@@ -62,9 +62,9 @@ def draw_ood_latent(zs, ood_zs, save_path, grad_arrows=np.array(None), MVNs=[]):
                 v = 2.0 * np.sqrt(2.0) * np.sqrt(v) 
                 v = v*200
 
-                ell = Ellipse(mean, v[0], v[1], angle=180.0 + angle, color='tab:pink')
-                ell.set_alpha(0.3)
-                ax.add_patch(ell)
+                # ell = Ellipse(mean, v[0], v[1], angle=180.0 + angle, color='tab:pink')
+                # ell.set_alpha(0.3)
+                # ax.add_patch(ell)
 
         ax.set_xlabel('x')
         ax.set_ylabel('y')

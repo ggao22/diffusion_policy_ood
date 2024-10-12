@@ -60,6 +60,7 @@ def main(output, render_size, control_hz):
         
         info = env._get_info()
         img = env.render(mode='human')
+        plt.imshow(img)
         
         # loop state
         retry = False
@@ -103,7 +104,6 @@ def main(output, render_size, control_hz):
                 # discard unused information such as visibility mask and agent pos
                 # for compatibility
                 keypoint = obs.reshape(2,-1)[0].reshape(-1,2)[:9]
-                print(keypoint)
                 data = {
                     'img': img,
                     'state': np.float32(state),

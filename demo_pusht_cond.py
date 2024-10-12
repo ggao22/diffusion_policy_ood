@@ -3,6 +3,7 @@ import click
 from diffusion_policy.common.replay_buffer import ReplayBuffer
 from diffusion_policy.env.pusht.pusht_keypoints_env import PushTKeypointsEnv
 import pygame
+import matplotlib.pyplot as plt
 
 def condition(obs, side_len, pre_def='left'):
     if pre_def=='left':
@@ -67,6 +68,9 @@ def main(output, render_size, control_hz):
         
         info = env._get_info()
         img = env.render(mode='human')
+        print(img.shape)
+        plt.imshow(img)
+        plt.show()
         
         # loop state
         retry = False

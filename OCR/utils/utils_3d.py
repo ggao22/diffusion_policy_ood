@@ -187,8 +187,11 @@ def abs_grad(traj, pose_0):
 def robosuite_data_to_obj_dataset(data):
     # data/demo_0/obs/object
     object_dataset = []
+    # Take Last 50%
+    take = 0.5
     for demo in data['data'].keys():
         obj_obs = np.array(data['data'][demo]['obs']['object'])
+        obj_obs = obj_obs[int(len(obj_obs)*take):]
         object_dataset.append(obj_obs)
     object_dataset = np.vstack((object_dataset)) # N,D
     return object_dataset
