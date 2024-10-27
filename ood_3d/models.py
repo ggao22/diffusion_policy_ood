@@ -16,11 +16,11 @@ class GMMGradient(nn.Module):
         self.GMM_PARAMS = GMM_PARAMS
 
         # set parameters for negative exponential
-        self.eps = 5500
-        self.lmb = 1100
+        self.phi = 5500
+        self.eta = 1100
     
     def param_negative_exponential(self, x):
-        return np.exp((-x+self.eps)/self.lmb)
+        return np.exp((-x+self.phi)/self.eta)
 
     def pdfs(self, x):
         densities = []

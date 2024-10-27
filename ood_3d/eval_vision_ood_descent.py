@@ -44,7 +44,9 @@ from models import GMMGradient
 from config import cfg as rec_cfg
 from config import combined_policy_cfg
 
-RENDER_SIZE = 84
+import cv2
+
+RENDER_SIZE = 512
 
 def draw_frame_axis_to_2d(T, ax, world_to_pixel, color, length=0.05, alpha=1.0):
     if ax is None:
@@ -138,13 +140,16 @@ def make_env(cfg):
     if cfg.task.abs_action:
         env_meta['env_kwargs']['controller_configs']['control_delta'] = False
 
+    env_meta['env_kwargs']['camera_heights'] = 512
+    env_meta['env_kwargs']['camera_widths'] = 512
+
     shape_meta = yaml.safe_load("""
     obs:
       agentview_image:
-        shape: [3, 84, 84]
+        shape: [3, 512, 512]
         type: rgb
       robot0_eye_in_hand_image:
-        shape: [3, 84, 84]
+        shape: [3, 512, 512]
         type: rgb
       robot0_eef_pos:
         shape: [3]
@@ -192,7 +197,10 @@ def create_env(env_meta, shape_meta, enable_render=True):
 def add_obs(new_obs_dict, past_obs_dict, n_obs_steps):
     for key in new_obs_dict.keys():
         if key=='object': continue
-        new_obs = new_obs_dict[key][None]
+        if 'image' in key: 
+            new_obs = np.moveaxis(cv2.resize(np.moveaxis(new_obs_dict[key], 0, 2), (84,84)), 2, 0)[None]
+        else:
+            new_obs = new_obs_dict[key][None]
         past_obs = past_obs_dict[key][0]
         if len(past_obs) < 1:
             past_obs = np.repeat(new_obs, n_obs_steps, 0)
@@ -267,14 +275,14 @@ def main(output_dir, device):
         ax1.cla()
         ax1.imshow(env_img)
         ax1.set_title(f"Env #{str(env_num)}, Delay {str(delay)}")
-        cam_kp = project_points_from_world_to_camera(kp, 
-                                                     world_to_camera_transform=camera_transform_matrix, 
-                                                     camera_height=RENDER_SIZE, 
-                                                     camera_width=RENDER_SIZE)
-        for i in range(len(cam_kp)):
-            ax1.scatter(cam_kp[i,1], cam_kp[i,0], color=plt.cm.rainbow(i/len(cam_kp)), s=15)
-        for pose in poses:
-            draw_frame_axis_to_2d(pose, ax1, camera_transform_matrix, color=plt.cm.rainbow(1), length=0.1, alpha=1.0)
+        # cam_kp = project_points_from_world_to_camera(kp, 
+        #                                              world_to_camera_transform=camera_transform_matrix, 
+        #                                              camera_height=RENDER_SIZE, 
+        #                                              camera_width=RENDER_SIZE)
+        # for i in range(len(cam_kp)):
+        #     ax1.scatter(cam_kp[i,1], cam_kp[i,0], color=plt.cm.rainbow(i/len(cam_kp)), s=15)
+        # for pose in poses:
+        #     draw_frame_axis_to_2d(pose, ax1, camera_transform_matrix, color=plt.cm.rainbow(1), length=0.1, alpha=1.0)
 
 
     vec2rot6d = RotationTransformer(from_rep='axis_angle', to_rep='rotation_6d')
@@ -296,7 +304,7 @@ def main(output_dir, device):
     max_iter = 35
     n_obs_steps = base_cfg.n_obs_steps
     # envs_tested = [4,5]
-    envs_tested = list(range(1))
+    envs_tested = list(range(5))
     np.random.seed(350)
     ood_offsets = np.random.uniform([-0.01,-0.35],[0.01,-0.25],(len(envs_tested),2))
     env_labels = []
@@ -310,10 +318,11 @@ def main(output_dir, device):
     
 
     for k in range(len(envs_tested)):
+        if k!=0: continue
         n = envs_tested[k]
         env.init_state = dataset[f'data/demo_{n}/states'][0]
         # i=10,11,12 is xyz of object
-        # env.init_state[10:12] = env.init_state[10:12] + ood_offsets[k]
+        env.init_state[10:12] = env.init_state[10:12] + ood_offsets[k]
         obs = env.reset()
 
         past_obs = {
@@ -337,12 +346,13 @@ def main(output_dir, device):
             print(np.mean(densities))
             
             if np.mean(densities) < OOD_THRESHOLD:
+            # if False:
                 ### Case: ODD
                 # rec_vectors = rec_vectors.reshape(cur_kp.shape[1:])
                 # kp_traj = generate_kp_traj(cur_kp[0], rec_vectors, horizon=16, delay=delay, alpha=0.0001) # H,n_kp,D_kp
-                kp_traj = generate_recovery_kp_traj(obs['object'], rec_policy, horizon=16, delay=delay, alpha=0.00005, random_walk=0.008)
-                if delay > 0: delay -= 1
-                # delay = update_delay(obs['robot0_eef_pos'], obs['object'][:3], horizon=16, min_dist=0.0612, max_dist=0.077)
+                kp_traj = generate_recovery_kp_traj(obs['object'], rec_policy, horizon=16, delay=delay, alpha=0.00005, random_walk=0.0)
+                # if delay > 0: delay -= 1
+                delay = update_delay(obs['robot0_eef_pos'], obs['object'][:3], horizon=16, min_dist=0.0612, max_dist=0.077)
                 abs_kp = abs_traj(kp_traj, cur_obj_pose[0])
 
                 cur_rot6d = obs_quat_to_rot6d(obs['robot0_eef_quat'])
@@ -454,7 +464,7 @@ def main(output_dir, device):
     print(f"Test done, average reward {np.mean(rewards)}")
     kp_vis = np.vstack((kp_vis))
     ani = FuncAnimation(fig, animate, frames=zip(env_imgs,kp_vis,gripper_states,env_labels,poses,delays), interval=100, save_count=sys.maxsize)
-    ani.save(os.path.join(output_dir,'combined_vision_ood.mp4'), writer='ffmpeg', fps=10) 
+    ani.save(os.path.join(output_dir,'combined_ood.mp4'), writer='ffmpeg', fps=10, dpi=400) 
     plt.show()
 
 

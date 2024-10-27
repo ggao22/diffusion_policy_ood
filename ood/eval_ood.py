@@ -108,7 +108,7 @@ def main(output_dir, device, screen_size):
 
     # create PushT env with keypoints
     kp_kwargs = PushTKeypointsImageEnv.genenerate_keypoint_manager_params()
-    env = PushTKeypointsImageEnv(render_size=screen_size, render_action=False,  display_rec=False, rec_cfg=rec_cfg, **kp_kwargs)
+    env = PushTKeypointsImageEnv(render_size=screen_size, render_action=False, display_rec=False, rec_cfg=rec_cfg, **kp_kwargs)
     clock = pygame.time.Clock()
 
     n_obs_steps = base_cfg.n_obs_steps
@@ -225,7 +225,7 @@ def main(output_dir, device, screen_size):
     print(len(env_imgs))
     print(len(states))
     ani = FuncAnimation(fig, animate, frames=zip(env_imgs,states), interval=50, save_count=sys.maxsize)
-    ani.save(os.path.join(output_dir,'base.mp4'), writer='ffmpeg', fps=20) 
+    ani.save(os.path.join(output_dir,'combined_ood.mp4'), writer='ffmpeg', fps=20, dpi=400) 
     plt.show()
 
 
