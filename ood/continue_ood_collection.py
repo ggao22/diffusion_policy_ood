@@ -17,7 +17,6 @@ import torch
 import dill
 import wandb
 import json
-from torch.utils.data import DataLoader
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from diffusion_policy.dataset.base_dataset import BaseLowdimDataset
 from diffusion_policy.common.pytorch_util import dict_apply
@@ -30,6 +29,9 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation  
 import numpy as np
 from ood.config import cfg as rec_cfg
+
+# continuous learning
+from diffusion_policy.common.replay_buffer import ReplayBuffer
 
 
 def load_policy(ckpt, device, output_dir):
@@ -81,9 +83,11 @@ def add_obs(new_obs, past_obs, n_obs_steps):
 
 @click.command()
 @click.option('-o', '--output_dir', required=True)
+@click.option('-a', '--augment_file', required=True)
 @click.option('-d', '--device', default='cuda:0')
-@click.option('-s', '--screen_size', default=512)
-def main(output_dir, device, screen_size):
+def main(output_dir, augment_file, device):
+    screen_size = 512
+
     if os.path.exists(output_dir):
         click.confirm(f"Output path {output_dir} already exists! Overwrite?", abort=True)
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -93,34 +97,23 @@ def main(output_dir, device, screen_size):
     # load base policy from checkpoint
     base_policy, base_cfg = load_policy(rec_cfg['base_ckpt'], device, output_dir)
 
-    pltscreen = (np.ones((screen_size,screen_size,3)) * 255).astype(int)
-    fig, ax = plt.subplots()
-
-    def animate(args):
-        env_img, state = args
-        if state==0:
-            fig.suptitle('Base Policy')
-        else:
-            fig.suptitle('Recovery Policy')
-        ax.cla()
-        ax.imshow(env_img)
-    
+    replay_buffer = ReplayBuffer.create_from_path(augment_file, mode='a')
 
     # create PushT env with keypoints
     kp_kwargs = PushTKeypointsImageEnv.genenerate_keypoint_manager_params()
-    env = PushTKeypointsImageEnv(render_size=screen_size, render_action=False,  display_rec=True, rec_cfg=rec_cfg, **kp_kwargs)
+    env = PushTKeypointsImageEnv(render_size=96, render_action=False,  display_rec=False, rec_cfg=rec_cfg, **kp_kwargs)
     clock = pygame.time.Clock()
 
     n_obs_steps = base_cfg.n_obs_steps
-
-    states = []
-    env_imgs = []
     max_iter = 60
-    episodes = 1
-    ood_threshold = 80
+    episodes = 5
+    ood_threshold = 90
 
     for n in range(episodes):
-        seed = n+350
+        # CL
+        episode = list()
+
+        seed = n+787787
         env.seed(seed)
         obs = env.reset()
         while not condition(obs['keypoints'], 512, 'right'):
@@ -137,14 +130,11 @@ def main(output_dir, device, screen_size):
         center_ang = get_center_ang(kp)
         kp_start = centralize(kp, center_pos, center_ang, screen_size) #9,2
 
-        reached_id = False
 
         # env policy control
         for iter in range(max_iter):
             print(np.linalg.norm(info['rec_vec'].mean(axis=0)))
-            if np.linalg.norm(info['rec_vec'].mean(axis=0)) > ood_threshold and not reached_id:
-            # if False:
-
+            if np.linalg.norm(info['rec_vec'].mean(axis=0)) > ood_threshold:
                 # case: Out-Of-Distribution
                 kp = obs['keypoints'][:18].reshape(9,2)
                 rec_vec = info['rec_vec']
@@ -153,8 +143,7 @@ def main(output_dir, device, screen_size):
                 center_ang = get_center_ang(kp)
                 kp_start = centralize(kp, center_pos, center_ang, screen_size) #9,2
                 rec_vec = centralize_grad(rec_vec, center_ang) #9,2
-                kp_traj = generate_kp_traj(kp_start, rec_vec, horizon=16, delay=12, alpha=5.0)
-                # alpha += 0.2
+                kp_traj = generate_kp_traj(kp_start, rec_vec, horizon=16, delay=11, alpha=4.0)
 
                 init_action = centralize(np.expand_dims(info['pos_agent'],0), center_pos, center_ang, screen_size)
 
@@ -179,54 +168,41 @@ def main(output_dir, device, screen_size):
                 action = np_action_dict['action_pred'].squeeze(0)
                 action = decentralize(action, center_pos, center_ang, screen_size)
 
-                states.extend([1]*action.shape[0])
-                
-            else:
-                reached_id = True
-                # case: In-Distribution
-                past_obs = add_obs(obs, past_obs, n_obs_steps)
-
-
-                # device transfer
-                obs_dict = dict_apply(past_obs, 
-                    lambda x: torch.from_numpy(x).to(
-                        device=device))
-
-                # run policy
-                with torch.no_grad():
-                    action_dict = base_policy.predict_action(obs_dict)
-                
-                np_action_dict = dict_apply(action_dict,
-                    lambda x: x.detach().to('cpu').numpy())
-
-                action = np_action_dict['action'].squeeze(0)
-
-                states.extend([0]*action.shape[0])
-
-
-            # step env and render
-            for i in range(len(action)):
                 # step env and render
-                act = action[i]
-                obs, reward, done, info = env.step(act)
-                img = env.render(mode='human')
-                env_imgs.append(img)
+                for i in range(len(action)):
+                    act = action[i]
 
-                if done: break
-            if done: 
-                print('done')
-                states = states[:len(env_imgs)]
+                    # state dim 2+3
+                    state = np.concatenate([info['pos_agent'], info['block_pose']])
+                    keypoint = obs['keypoints'][:18].reshape(9,2)
+                    data = {
+                        'img': img,
+                        'state': np.float32(state),
+                        'keypoint': np.float32(keypoint),
+                        'action': np.float32(act),
+                        'n_contacts': np.float32([info['n_contacts']])
+                    }
+                    episode.append(data)
+
+                    # step env and render
+                    obs, reward, done, info = env.step(act)
+                    img = env.render(mode='human')
+
+                # regulate control frequency
+                control_hz = 10
+                clock.tick(control_hz)
+
+            else: 
                 break
-
-            # regulate control frequency
-            control_hz = 10
-            clock.tick(control_hz)
-
-    print(len(env_imgs))
-    print(len(states))
-    ani = FuncAnimation(fig, animate, frames=zip(env_imgs,states), interval=50, save_count=sys.maxsize)
-    ani.save(os.path.join(output_dir,'base.mp4'), writer='ffmpeg', fps=20) 
-    plt.show()
+        
+        if click.confirm('Save Episode?'):
+            # save episode buffer to replay buffer (on disk)
+            data_dict = dict()
+            for key in episode[0].keys():
+                data_dict[key] = np.stack(
+                    [x[key] for x in episode])
+            replay_buffer.add_episode(data_dict, compressors='disk')
+            print(f'saved seed {seed}')
 
 
 def generate_kp_traj(kp_start, recovery_vec, horizon, delay, alpha=0.01):

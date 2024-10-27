@@ -115,15 +115,15 @@ def main(output_dir, device, screen_size):
 
     states = []
     env_imgs = []
-    max_iter = 60
-    episodes = 1
+    max_iter = 70
+    episodes = 10
     ood_threshold = 80
 
     for n in range(episodes):
         seed = n+350
         env.seed(seed)
         obs = env.reset()
-        while not condition(obs['keypoints'], 512, 'right'):
+        while not condition(obs['keypoints'], 512, 'left'):
             seed += 2**12
             env.seed(seed)
             obs = env.reset()
@@ -137,7 +137,7 @@ def main(output_dir, device, screen_size):
         center_ang = get_center_ang(kp)
         kp_start = centralize(kp, center_pos, center_ang, screen_size) #9,2
 
-        reached_id = False
+        reached_id = True
 
         # env policy control
         for iter in range(max_iter):
@@ -225,7 +225,7 @@ def main(output_dir, device, screen_size):
     print(len(env_imgs))
     print(len(states))
     ani = FuncAnimation(fig, animate, frames=zip(env_imgs,states), interval=50, save_count=sys.maxsize)
-    ani.save(os.path.join(output_dir,'base.mp4'), writer='ffmpeg', fps=20) 
+    ani.save(os.path.join(output_dir,'continuous_id.mp4'), writer='ffmpeg', fps=20) 
     plt.show()
 
 

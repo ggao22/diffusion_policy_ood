@@ -68,9 +68,6 @@ def main(output, render_size, control_hz):
         
         info = env._get_info()
         img = env.render(mode='human')
-        print(img.shape)
-        plt.imshow(img)
-        plt.show()
         
         # loop state
         retry = False
@@ -111,10 +108,11 @@ def main(output, render_size, control_hz):
                 # teleop started
                 # state dim 2+3
                 state = np.concatenate([info['pos_agent'], info['block_pose']])
+                print(state)
                 # discard unused information such as visibility mask and agent pos
                 # for compatibility
-                keypoint = obs.reshape(2,-1)[0].reshape(-1,2)[:9]
-                # print(keypoint)
+                keypoint = obs[:-2].reshape(-1,2)[:9]
+
                 data = {
                     'img': img,
                     'state': np.float32(state),
