@@ -1,7 +1,7 @@
 """
 Usage:
 Training:
-python train.py --config-name=train_diffusion_lowdim_workspace
+python train_gmm.py -rc bottle_recovery
 """
 
 import os
