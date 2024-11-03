@@ -40,6 +40,8 @@ def train_gmm(cfg):
         object_dataset = utils_3d.robosuite_data_to_obj_dataset(data) #N,14
         N, _ = object_dataset.shape
         object_pose_dataset = utils_3d.to_obj_pose(object_dataset) #N,4,4
+        if cfg['gmm']['use_offset']:
+            object_pose_dataset[:,:3,3] = object_pose_dataset[:,:3,3] + np.array([cfg['gmm']['x_offset'], cfg['gmm']['y_offset'], cfg['gmm']['z_offset']])
         object_kp_dataset = utils_3d.gen_keypoints(object_pose_dataset) #N,3,3
         object_kp_dataset = object_kp_dataset.reshape(N,-1) #N,9
 

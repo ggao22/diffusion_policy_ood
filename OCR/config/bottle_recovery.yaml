@@ -1,18 +1,23 @@
 name: bottle_recovery
 
 keypoint_dim: 3
-dataset_path: data/real/datasets/bottle/ph/bottle_small.hdf5
+dataset_path: data/real/datasets/bottle/ph/bottle_smaller.hdf5
 
 gmm:
-  n_components: 4
-  params_used: /home/george/diffusion_policy/data/outputs/2024.10.28/12.34.38_bottle_recovery_gmm/gmms.npz #4
-  
+  n_components: 3
+  params_used: /home/george/diffusion_policy/data/outputs/2024.10.29/07.44.33_bottle_recovery_gmm/gmms.npz #3
+  use_offset: True
+  x_offset: -0.1
+  y_offset: 0.0
+  z_offset: 0.3
+
 recovery:
   alpha: 0.00005
   random_walk: 0.008
 
 translator_policy:
-  checkpoint_used: /home/george/diffusion_policy/data/outputs/2024.10.09/09.17.12_train_diffusion_unet_lowdim_obsact_bottle_lowdim/checkpoints/epoch=1050-train_action_mse_error=0.001.ckpt
+  # checkpoint_used: /home/george/diffusion_policy/data/outputs/2024.10.28/17.54.36_train_diffusion_unet_lowdim_obsact_bottle_lowdim/checkpoints/epoch=1500-train_action_mse_error=0.005.ckpt
+  checkpoint_used: /home/george/diffusion_policy/data/outputs/2024.10.28/17.54.36_train_diffusion_unet_lowdim_obsact_bottle_lowdim/checkpoints/latest.ckpt
 
 base_policy:
   checkpoint_used: /home/george/diffusion_policy/data/outputs/2024.10.27/21.01.50_train_diffusion_unet_image_bottle_image/checkpoints/latest.ckpt
